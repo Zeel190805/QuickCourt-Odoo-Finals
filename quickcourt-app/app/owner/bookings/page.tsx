@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,25 +25,31 @@ interface BookingDTO {
 }
 
 export default function OwnerBookingsPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
   const [venues, setVenues] = useState<Venue[]>([])
   const [selectedVenueId, setSelectedVenueId] = useState<string>("all")
   const [bookings, setBookings] = useState<BookingDTO[]>([])
   const [search, setSearch] = useState("")
 
   useEffect(() => {
-    if (!user) return
-    const ownerId = (user as any).id || (user as any)._id
-    fetch("/api/venues").then((r) => r.json()).then((data: Venue[]) => {
-      const own = data.filter((v) => String(v.owner) === String(ownerId))
-      setVenues(own)
-      if (own.length && !selectedVenueId) setSelectedVenueId(own[0]._id)
-    })
-  }, [user])
+    if (authLoading) return
+    if (!user || user.role !== "owner") {
+      router.push("/auth/login")
+      return
+    }
+    fetch("/api/venues")
+      .then((r) => r.json())
+      .then((data: Venue[]) => {
+        const own = Array.isArray(data) ? data : []
+        setVenues(own)
+        if (own.length && selectedVenueId === "all") setSelectedVenueId("all")
+      })
+      .catch(() => setVenues([]))
+  }, [user, authLoading, router])
 
-  const load = async (ownerId: string, venueId?: string) => {
+  const load = async (venueId?: string) => {
     const qp = new URLSearchParams()
-    qp.set("owner", ownerId)
     if (venueId && venueId !== "all") qp.set("venue", venueId)
     const res = await fetch(`/api/bookings?${qp.toString()}`)
     const data = await res.json()
@@ -50,10 +57,10 @@ export default function OwnerBookingsPage() {
   }
 
   useEffect(() => {
-    if (!user) return
-    const ownerId = (user as any).id || (user as any)._id
-    void load(ownerId, selectedVenueId)
-  }, [user, selectedVenueId])
+    if (authLoading) return
+    if (!user || user.role !== "owner") return
+    void load(selectedVenueId)
+  }, [user, authLoading, selectedVenueId])
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -77,8 +84,7 @@ export default function OwnerBookingsPage() {
     await fetch("/api/bookings/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ bookingId, reason: "Owner cancellation" }) })
     // Refresh
     if (!user) return
-    const ownerId = (user as any).id || (user as any)._id
-    await load(ownerId, selectedVenueId || undefined)
+    await load(selectedVenueId || undefined)
   }
 
   return (

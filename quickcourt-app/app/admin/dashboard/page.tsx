@@ -55,7 +55,7 @@ interface SystemAlert {
 }
 
 export default function AdminDashboard() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [stats, setStats] = useState<AdminStats>({
     totalUsers: 0,
@@ -75,6 +75,7 @@ export default function AdminDashboard() {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "admin") {
       router.push("/auth/login")
       return
@@ -113,7 +114,7 @@ export default function AdminDashboard() {
     }
 
     fetchData()
-  }, [user, router])
+  }, [user, router, authLoading])
 
   if (isLoading) {
     return (
@@ -220,7 +221,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalUsers}</div>
-              <p className="text-xs text-muted-foreground">+18% from last month</p>
+              <p className="text-xs text-muted-foreground">Registered players</p>
             </CardContent>
           </Card>
           <Card>
@@ -230,7 +231,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalOwners}</div>
-              <p className="text-xs text-muted-foreground">+4 new this month</p>
+              <p className="text-xs text-muted-foreground">Registered owners</p>
             </CardContent>
           </Card>
           <Card>
@@ -240,7 +241,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.totalBookings}</div>
-              <p className="text-xs text-muted-foreground">+12% from last month</p>
+              <p className="text-xs text-muted-foreground">Confirmed bookings</p>
             </CardContent>
           </Card>
           <Card>
@@ -270,7 +271,7 @@ export default function AdminDashboard() {
             </CardHeader>
             <CardContent>
                               <div className="text-2xl font-bold">₹{stats.monthlyRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">+24% from last month</p>
+              <p className="text-xs text-muted-foreground">Confirmed this month</p>
             </CardContent>
           </Card>
         </div>
@@ -357,7 +358,7 @@ export default function AdminDashboard() {
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="month" />
                   <YAxis />
-                  <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]} />
+                  <Tooltip formatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]} />
                   <Bar dataKey="revenue" fill="#82ca9d" />
                 </BarChart>
               </ResponsiveContainer>

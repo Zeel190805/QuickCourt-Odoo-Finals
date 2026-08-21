@@ -64,7 +64,7 @@ interface ModerationStats {
 }
 
 export default function Moderation() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const [reports, setReports] = useState<Report[]>([])
@@ -99,13 +99,14 @@ export default function Moderation() {
   })
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "admin") {
       router.push("/auth/login")
       return
     }
 
     fetchData()
-  }, [user, router])
+  }, [user, router, authLoading])
 
   const fetchData = async () => {
     try {

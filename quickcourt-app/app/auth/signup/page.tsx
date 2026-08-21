@@ -43,17 +43,22 @@ export default function SignupPage() {
     setIsLoading(true)
 
     try {
-      const success = await signup(formData)
-      if (success) {
+      const result = await signup({
+        name: formData.name,
+        email: formData.email,
+        password: formData.password,
+        role: formData.role,
+      })
+      if (result.ok) {
         setShowOTP(true)
         toast({
           title: "Account created",
-          description: "Please verify your email with the OTP sent to you. Use 123456 for demo.",
+          description: "Please verify your email with the OTP sent to you.",
         })
       } else {
         toast({
           title: "Signup failed",
-          description: "Please try again",
+          description: result.error || "Please try again",
           variant: "destructive",
         })
       }
@@ -73,8 +78,8 @@ export default function SignupPage() {
     setIsLoading(true)
 
     try {
-      const success = await verifyOTP(otp)
-      if (success) {
+      const result = await verifyOTP(otp, formData.email)
+      if (result.ok) {
         toast({
           title: "Email verified",
           description: "Your account has been verified successfully!",
@@ -83,7 +88,7 @@ export default function SignupPage() {
       } else {
         toast({
           title: "Invalid OTP",
-          description: "Please check your OTP and try again",
+          description: result.error || "Please check your OTP and try again",
           variant: "destructive",
         })
       }
@@ -116,7 +121,7 @@ export default function SignupPage() {
                   value={otp}
                   onChange={(e) => setOtp(e.target.value)}
                   required
-                  placeholder="Enter 6-digit OTP (use 123456 for demo)"
+                  placeholder="Enter 6-digit OTP"
                   maxLength={6}
                 />
               </div>

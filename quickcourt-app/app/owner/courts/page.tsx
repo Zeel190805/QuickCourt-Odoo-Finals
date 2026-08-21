@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog"
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
@@ -80,7 +81,8 @@ function CourtForm({ initial, onSubmit, loading }: { initial: Partial<CourtDTO>;
 }
 
 export default function OwnerCourtsPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
+  const router = useRouter()
   const [venues, setVenues] = useState<VenueDTO[]>([])
   const [selectedVenueId, setSelectedVenueId] = useState<string>("")
   const [courts, setCourts] = useState<CourtDTO[]>([])
@@ -89,16 +91,20 @@ export default function OwnerCourtsPage() {
   const [editCourt, setEditCourt] = useState<CourtDTO | null>(null)
 
   useEffect(() => {
-    if (!user) return
-    const ownerId = (user as any).id || (user as any)._id
+    if (authLoading) return
+    if (!user || user.role !== "owner") {
+      router.push("/auth/login")
+      return
+    }
     fetch("/api/venues")
       .then((r) => r.json())
       .then((data: VenueDTO[]) => {
-        const own = data.filter((v) => String(v.owner) === String(ownerId))
+        const own = Array.isArray(data) ? data : []
         setVenues(own)
         if (own.length && !selectedVenueId) setSelectedVenueId(own[0]._id)
       })
-  }, [user])
+      .catch(() => setVenues([]))
+  }, [user, authLoading, router])
 
   const loadCourts = async (venueId: string) => {
     if (!venueId) return
@@ -117,7 +123,9 @@ export default function OwnerCourtsPage() {
     if (!selectedVenueId) return
     setLoading(true)
     try {
-      const body = { ...data, venue: selectedVenueId, basePricePerHour: Number(data.basePricePerHour ?? 0) }
+      const price = Number(data.basePricePerHour)
+      if (!Number.isFinite(price) || price <= 0) return
+      const body = { ...data, venue: selectedVenueId, basePricePerHour: price }
       if (editCourt) {
         await fetch(`/api/courts/${editCourt._id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       } else {

@@ -1,46 +1,22 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/db'
-import { User } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, User } from "@/lib/db"
+import { isValidObjectId, jsonError, requireAuth } from "@/lib/api"
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
+    if (!isValidObjectId(params.id)) return jsonError("Invalid user id", 400)
     await dbConnect()
-    const { id } = params
     const body = await request.json()
-
     const { isVerified } = body
-
-    // Validate input
-    if (typeof isVerified !== 'boolean') {
-      return NextResponse.json(
-        { error: 'isVerified must be a boolean' },
-        { status: 400 }
-      )
+    if (typeof isVerified !== "boolean") {
+      return jsonError("isVerified must be a boolean", 400)
     }
-
-    // Update user verification status
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { isVerified },
-      { new: true, runValidators: true }
-    ).select('-password')
-
-    if (!updatedUser) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
-    }
-
+    const updatedUser = await User.findByIdAndUpdate(params.id, { isVerified }, { new: true, runValidators: true }).select("-password")
+    if (!updatedUser) return jsonError("User not found", 404)
     return NextResponse.json({ user: updatedUser })
-  } catch (error) {
-    console.error('Error updating user verification:', error)
-    return NextResponse.json(
-      { error: 'Failed to update user verification' },
-      { status: 500 }
-    )
+  } catch {
+    return jsonError("Failed to update user verification", 500)
   }
 }

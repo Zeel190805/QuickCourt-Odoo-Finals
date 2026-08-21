@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/hooks/use-toast"
 import { MapPin, Clock, Calendar, X } from "lucide-react"
 import Link from "next/link"
+import { formatBookingDate } from "@/lib/dates"
 
 interface BookingDTO {
   _id: string
@@ -24,26 +25,36 @@ interface BookingDTO {
 }
 
 export default function MyBookingsPage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const [bookings, setBookings] = useState<BookingDTO[]>([])
   const [isLoading, setIsLoading] = useState(true)
 
   useEffect(() => {
+    if (authLoading) return
     if (!user) {
       router.push("/auth/login")
       return
     }
 
     const load = async () => {
-      const res = await fetch(`/api/bookings?user=${(user as any)?.id || (user as any)?._id}`)
-      const data = await res.json()
-      setBookings(Array.isArray(data) ? data : [])
+      try {
+        const res = await fetch("/api/bookings")
+        if (!res.ok) {
+          setBookings([])
+          return
+        }
+        const data = await res.json()
+        setBookings(Array.isArray(data) ? data : [])
+      } catch {
+        setBookings([])
+      } finally {
+        setIsLoading(false)
+      }
     }
-    load()
-    setIsLoading(false)
-  }, [user, router])
+    void load()
+  }, [user, router, authLoading])
 
   const handleCancelBooking = async (bookingId: string) => {
     try {
@@ -170,7 +181,7 @@ export default function MyBookingsPage() {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div>
-                          <CardTitle className="text-lg">{booking.venue.name}</CardTitle>
+                          <CardTitle className="text-lg">{booking.venue?.name || "Venue"}</CardTitle>
                           <CardDescription>
                             <div className="flex items-center mt-1">
                               <MapPin className="h-4 w-4 mr-1" />
@@ -188,14 +199,14 @@ export default function MyBookingsPage() {
                         <div className="space-y-2">
                           <div className="flex items-center">
                             <span className="font-semibold mr-2">Court:</span>
-                             <span>{booking.court.name}</span>
+                             <span>{booking.court?.name || "Court"}</span>
                             <Badge variant="secondary" className="ml-2">
-                              {booking.court.sport}
+                              {booking.court?.sport}
                             </Badge>
                           </div>
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-2" />
-                            <span>{new Date(booking.date).toLocaleDateString()}</span>
+                            <span>{formatBookingDate(booking.date)}</span>
                           </div>
                           <div className="flex items-center">
                             <Clock className="h-4 w-4 mr-2" />
@@ -240,7 +251,7 @@ export default function MyBookingsPage() {
                     <CardHeader>
                       <div className="flex justify-between items-start">
                         <div>
-                          <CardTitle className="text-lg">{booking.venue.name}</CardTitle>
+                          <CardTitle className="text-lg">{booking.venue?.name || "Venue"}</CardTitle>
                           <CardDescription>
                             <div className="flex items-center mt-1">
                               <MapPin className="h-4 w-4 mr-1" />
@@ -258,14 +269,14 @@ export default function MyBookingsPage() {
                         <div className="space-y-2">
                           <div className="flex items-center">
                             <span className="font-semibold mr-2">Court:</span>
-                             <span>{booking.court.name}</span>
+                             <span>{booking.court?.name || "Court"}</span>
                             <Badge variant="secondary" className="ml-2">
-                              {booking.court.sport}
+                              {booking.court?.sport}
                             </Badge>
                           </div>
                           <div className="flex items-center">
                             <Calendar className="h-4 w-4 mr-2" />
-                            <span>{new Date(booking.date).toLocaleDateString()}</span>
+                            <span>{formatBookingDate(booking.date)}</span>
                           </div>
                           <div className="flex items-center">
                             <Clock className="h-4 w-4 mr-2" />

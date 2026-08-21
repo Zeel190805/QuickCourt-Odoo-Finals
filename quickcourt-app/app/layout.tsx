@@ -4,14 +4,12 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { AuthProvider } from "@/contexts/AuthContext"
 import { Toaster } from "@/components/ui/toaster"
-import ConditionalChatWidget from "@/components/conditional-chat-widget"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
   title: "QuickCourt - Sports Facility Booking",
   description: "Book local sports facilities and join matches with others",
-    generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -25,7 +23,6 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <Toaster />
-          <ConditionalChatWidget />
         </AuthProvider>
       </body>
     </html>

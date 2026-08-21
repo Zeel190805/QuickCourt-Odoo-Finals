@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useState, useEffect, useCallback } from "react"
 
 interface User {
   id: string
@@ -15,18 +15,20 @@ interface User {
   preferences?: {
     emailNotifications: boolean
     smsNotifications: boolean
-    privacyLevel: 'public' | 'friends' | 'private'
+    privacyLevel: "public" | "friends" | "private"
   }
   isVerified: boolean
+  accountStatus?: "active" | "suspended" | "banned"
 }
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<boolean>
-  signup: (userData: any) => Promise<boolean>
-  logout: () => void
-  verifyOTP: (otp: string) => Promise<boolean>
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  signup: (userData: { name: string; email: string; password: string; role?: string }) => Promise<{ ok: boolean; error?: string; email?: string }>
+  logout: () => Promise<void>
+  verifyOTP: (otp: string, email: string) => Promise<{ ok: boolean; error?: string }>
   updateUser: (userData: User) => void
+  refreshUser: () => Promise<void>
   isLoading: boolean
 }
 
@@ -36,81 +38,85 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [isLoading, setIsLoading] = useState(true)
 
-  useEffect(() => {
-    // Check for stored user data
-    const storedUser = localStorage.getItem("quickcourt_user")
-    if (storedUser) {
-      setUser(JSON.parse(storedUser))
+  const refreshUser = useCallback(async () => {
+    try {
+      const response = await fetch("/api/auth/me", { credentials: "include" })
+      if (response.ok) {
+        const data = await response.json()
+        setUser(data.user)
+      } else {
+        setUser(null)
+      }
+    } catch {
+      setUser(null)
     }
-    setIsLoading(false)
   }, [])
 
-  const login = async (email: string, password: string): Promise<boolean> => {
+  useEffect(() => {
+    refreshUser().finally(() => setIsLoading(false))
+  }, [refreshUser])
+
+  const login = async (email: string, password: string) => {
     try {
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
-
+      const data = await response.json()
       if (response.ok) {
-        const userData = await response.json()
-        setUser(userData.user)
-        localStorage.setItem("quickcourt_user", JSON.stringify(userData.user))
-        localStorage.setItem("quickcourt_token", userData.token)
-        return true
+        setUser(data.user)
+        return { ok: true }
       }
-      return false
-    } catch (error) {
-      console.error("Login error:", error)
-      return false
+      return { ok: false, error: data.error || "Login failed" }
+    } catch {
+      return { ok: false, error: "Login failed" }
     }
   }
 
-  const signup = async (userData: any): Promise<boolean> => {
+  const signup = async (userData: { name: string; email: string; password: string; role?: string }) => {
     try {
       const response = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(userData),
       })
-
+      const data = await response.json()
       if (response.ok) {
-        const result = await response.json()
-        // Don't set user yet, wait for OTP verification
-        return true
+        return { ok: true, email: data.email || userData.email }
       }
-      return false
-    } catch (error) {
-      console.error("Signup error:", error)
-      return false
+      return { ok: false, error: data.error || "Signup failed" }
+    } catch {
+      return { ok: false, error: "Signup failed" }
     }
   }
 
-  const verifyOTP = async (otp: string): Promise<boolean> => {
+  const verifyOTP = async (otp: string, email: string) => {
     try {
-      // Mock OTP verification - in real app, this would verify with backend
-      console.log("OTP Verification:", otp)
-      if (otp === "123456") {
-        // Mock successful verification
-        return true
-      }
-      return false
-    } catch (error) {
-      console.error("OTP verification error:", error)
-      return false
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, otp }),
+      })
+      const data = await response.json()
+      if (response.ok) return { ok: true }
+      return { ok: false, error: data.error || "Invalid OTP" }
+    } catch {
+      return { ok: false, error: "OTP verification failed" }
     }
   }
 
   const updateUser = (userData: User) => {
     setUser(userData)
-    localStorage.setItem("quickcourt_user", JSON.stringify(userData))
   }
 
-  const logout = () => {
-    setUser(null)
-    localStorage.removeItem("quickcourt_user")
-    localStorage.removeItem("quickcourt_token")
+  const logout = async () => {
+    try {
+      await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
+    } finally {
+      setUser(null)
+    }
   }
 
   return (
@@ -122,6 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         logout,
         verifyOTP,
         updateUser,
+        refreshUser,
         isLoading,
       }}
     >

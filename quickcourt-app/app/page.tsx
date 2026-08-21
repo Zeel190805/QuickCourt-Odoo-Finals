@@ -24,12 +24,13 @@ interface VenueApi {
 }
 
 export default function HomePage() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [popularVenues, setPopularVenues] = useState<VenueApi[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
+    if (authLoading) return
     if (user) {
       // Redirect based on user role
       switch (user.role) {
@@ -44,17 +45,19 @@ export default function HomePage() {
           break
       }
     }
-  }, [user, router])
+  }, [user, router, authLoading])
 
   // Fetch approved venues for popular venues section
   useEffect(() => {
     setLoading(true)
     fetch("/api/venues")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: VenueApi[]) => {
+        if (!Array.isArray(data)) return
         const approved = data.filter((v) => v.status === "approved").slice(0, 3)
         setPopularVenues(approved)
       })
+      .catch(() => setPopularVenues([]))
       .finally(() => setLoading(false))
   }, [])
 

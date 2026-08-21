@@ -47,7 +47,7 @@ interface Booking {
 }
 
 export default function OwnerDashboard() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [stats, setStats] = useState<DashboardStats>({
     totalBookings: 0,
@@ -64,6 +64,7 @@ export default function OwnerDashboard() {
 
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "owner") {
       router.push("/auth/login")
       return
@@ -72,7 +73,7 @@ export default function OwnerDashboard() {
     const fetchDashboardData = async () => {
       try {
         // Fetch stats
-        const statsResponse = await fetch(`/api/owner/dashboard/stats?ownerId=${user.id}`)
+        const statsResponse = await fetch(`/api/owner/dashboard/stats`)
         const statsData = await statsResponse.json()
         
         if (statsResponse.ok) {
@@ -88,7 +89,7 @@ export default function OwnerDashboard() {
         }
 
         // Fetch chart data and recent bookings
-        const chartsResponse = await fetch(`/api/owner/dashboard/charts?ownerId=${user.id}`)
+        const chartsResponse = await fetch(`/api/owner/dashboard/charts`)
         const chartsData = await chartsResponse.json()
         
         if (chartsResponse.ok) {
@@ -105,7 +106,7 @@ export default function OwnerDashboard() {
     }
 
     fetchDashboardData()
-  }, [user, router])
+  }, [user, router, authLoading])
 
   if (isLoading) {
     return (

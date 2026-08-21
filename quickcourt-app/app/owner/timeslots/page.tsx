@@ -1,14 +1,17 @@
 "use client";
 import React, { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
+import { localDateString } from "@/lib/dates"
 
 export default function OwnerTimeSlotsPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [venues, setVenues] = useState<any[]>([]);
   const [courts, setCourts] = useState<any[]>([]);
   const [selectedVenue, setSelectedVenue] = useState<string>("");
@@ -26,15 +29,18 @@ export default function OwnerTimeSlotsPage() {
   }, [selectedDate]);
 
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return
+    if (!user || user.role !== "owner") {
+      router.push("/auth/login")
+      return
+    }
     fetch("/api/venues")
       .then((r) => r.json())
       .then((data) => {
-        const ownerId = (user as any).id || (user as any)._id;
-        const mine = data.filter((v: any) => String(v.owner) === String(ownerId));
-        setVenues(mine);
-      });
-  }, [user]);
+        setVenues(Array.isArray(data) ? data : [])
+      })
+      .catch(() => setVenues([]))
+  }, [user, authLoading, router])
 
   useEffect(() => {
     if (!selectedVenue) {
@@ -93,9 +99,8 @@ export default function OwnerTimeSlotsPage() {
       return;
     }
     try {
-      const date = selectedDate.toISOString().slice(0, 10);
-      // Request hides past slots automatically and cleans up past ones for today
-      const res = await fetch(`/api/timeslots?venue=${selectedVenue}&court=${selectedCourt}&date=${date}&cleanup=1`);
+      const date = localDateString(selectedDate);
+      const res = await fetch(`/api/timeslots?venue=${selectedVenue}&court=${selectedCourt}&date=${date}`);
       if (!res.ok) {
         setSlots([]);
         return;
@@ -121,7 +126,7 @@ export default function OwnerTimeSlotsPage() {
     if (!selectedVenue || !selectedCourt || !selectedDate) return alert("Select venue, court and date");
     if (!/^\d{2}:\d{2}$/.test(newTime)) return alert("Time must be HH:mm");
     if (newPrice <= 0) return alert("Enter a valid price");
-    const date = selectedDate.toISOString().slice(0, 10);
+    const date = localDateString(selectedDate);
     const price = Number(newPrice || 0);
     const res = await fetch("/api/timeslots", {
       method: "POST",

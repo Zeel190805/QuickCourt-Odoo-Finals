@@ -1,78 +1,51 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { emailService, type ReminderEmailData } from "@/lib/email"
+import { emailService } from "@/lib/email"
+import { dbConnect, Booking } from "@/lib/db"
+import { isValidObjectId, jsonError, requireAuth } from "@/lib/api"
+import { appUrl } from "@/lib/utils"
+import { bookingDateTime, formatBookingDate } from "@/lib/dates"
 
 export async function POST(request: NextRequest) {
   try {
-    const { bookingId, reminderType } = await request.json()
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
 
-    // Mock booking data
-    const booking = {
-      id: bookingId,
-      customerName: "John Smith",
-      customerEmail: "john@example.com",
-      venueName: "SportZone Arena",
-      venueLocation: "Downtown, City Center",
-      venueAddress: "123 Sports Street, Downtown, City 12345",
-      venuePhone: "+1 (555) 123-4567",
-      courtName: "Badminton Court 1",
-      sport: "Badminton",
-      date: "2024-01-20",
-      time: "18:00",
-      duration: 2,
-      totalAmount: 50,
+    await dbConnect()
+    const { bookingId } = await request.json()
+    if (!isValidObjectId(bookingId)) {
+      return jsonError("Invalid booking id", 400)
     }
 
-    // Determine reminder timing
-    const reminderTimes = {
-      "24h": "tomorrow",
-      "2h": "in 2 hours",
-      "30m": "in 30 minutes",
-    }
+    const booking = await Booking.findById(bookingId).populate("user", "name email")
+    if (!booking) return jsonError("Booking not found", 404)
+    if (booking.status !== "confirmed") return jsonError("Booking is not active", 400)
 
-    const reminderTime = reminderTimes[reminderType as keyof typeof reminderTimes] || "soon"
-    const canCancel = reminderType === "24h" || reminderType === "2h"
+    const start = bookingDateTime(booking.date, booking.time)
+    if (!start) return jsonError("Invalid booking date", 400)
 
-    // Prepare email data
-    const emailData: ReminderEmailData = {
-      customerName: booking.customerName,
-      customerEmail: booking.customerEmail,
-      bookingId: booking.id,
-      venueName: booking.venueName,
-      venueLocation: booking.venueLocation,
-      venueAddress: booking.venueAddress,
-      venuePhone: booking.venuePhone,
-      courtName: booking.courtName,
-      sport: booking.sport,
-      bookingDate: new Date(booking.date).toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
+    const customerEmail = booking.customerEmail || (booking.user as { email?: string } | null)?.email
+    if (!customerEmail) return jsonError("No email on file for this booking", 400)
+
+    const emailSent = await emailService.sendBookingReminder({
+      customerName: booking.customerName || (booking.user as { name?: string } | null)?.name || "Customer",
+      customerEmail,
+      bookingId: String(booking._id),
+      venueName: booking.venueName || "Venue",
+      venueLocation: booking.venueLocation || "",
+      courtName: booking.courtName || "Court",
+      sport: booking.sport || "",
+      bookingDate: formatBookingDate(booking.date),
       bookingTime: booking.time,
       duration: booking.duration,
       totalAmount: booking.totalAmount,
-      reminderTime,
-      canCancel,
-      bookingUrl: `${process.env.NEXT_PUBLIC_APP_URL}/bookings`,
-      venueUrl: `${process.env.NEXT_PUBLIC_APP_URL}/venues/1`,
-      cancelUrl: canCancel ? `${process.env.NEXT_PUBLIC_APP_URL}/bookings/cancel/${booking.id}` : undefined,
-    }
-
-    // Send reminder email
-    const emailSent = await emailService.sendBookingReminder(emailData)
-
-    if (!emailSent) {
-      console.warn("Failed to send booking reminder email")
-    }
-
-    return NextResponse.json({
-      success: true,
-      emailSent,
-      message: `Booking reminder sent successfully (${reminderTime})`,
+      bookingUrl: `${appUrl()}/bookings`,
+      venueUrl: `${appUrl()}/venues/${String(booking.venue)}`,
+      cancelUrl: `${appUrl()}/bookings`,
     })
+
+    return NextResponse.json({ success: emailSent, bookingId: String(booking._id) })
   } catch (error) {
-    console.error("Booking reminder error:", error)
-    return NextResponse.json({ error: "Failed to send booking reminder" }, { status: 500 })
+    console.error(error)
+    return NextResponse.json({ error: "Failed to send reminder" }, { status: 500 })
   }
 }

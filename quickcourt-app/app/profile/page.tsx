@@ -16,7 +16,7 @@ import { User, Phone, MapPin, Camera, ArrowLeft, Upload, X, Edit3, Save, Loader2
 import Link from "next/link"
 
 export default function ProfilePage() {
-  const { user, logout, updateUser } = useAuth()
+  const { user, logout, updateUser, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -39,6 +39,7 @@ export default function ProfilePage() {
   })
 
   useEffect(() => {
+    if (authLoading) return
     if (!user) {
       router.push("/auth/login")
       return
@@ -49,15 +50,15 @@ export default function ProfilePage() {
       email: user.email || "",
       phone: user.phone || "",
       location: user.location || "",
-      avatar: user.avatar || "/placeholder-user.jpg",
+      avatar: user.avatar || "",
       bio: user.bio || "",
       preferences: {
         emailNotifications: user.preferences?.emailNotifications ?? true,
         smsNotifications: user.preferences?.smsNotifications ?? false,
-        privacyLevel: user.preferences?.privacyLevel ?? 'public'
-      }
+        privacyLevel: user.preferences?.privacyLevel ?? "public",
+      },
     })
-  }, [user, router])
+  }, [user, router, authLoading])
 
   const handleSave = async () => {
     if (!user?.id) return
@@ -70,8 +71,13 @@ export default function ProfilePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          userId: user.id,
-          profileData
+          profileData: {
+            name: profileData.name,
+            phone: profileData.phone,
+            location: profileData.location,
+            bio: profileData.bio,
+            preferences: profileData.preferences,
+          },
         }),
       })
 
@@ -113,8 +119,7 @@ export default function ProfilePage() {
     setIsUploading(true)
     try {
       const formData = new FormData()
-      formData.append('userId', user.id)
-      formData.append('avatar', file)
+      formData.append("avatar", file)
 
       const response = await fetch('/api/profile/upload-avatar', {
         method: 'POST',
@@ -154,12 +159,12 @@ export default function ProfilePage() {
     }
   }
 
-  const handleLogout = () => {
-    logout()
+  const handleLogout = async () => {
+    await logout()
     router.push("/")
   }
 
-  if (!user) {
+  if (authLoading || !user) {
     return null
   }
 
@@ -357,8 +362,7 @@ export default function ProfilePage() {
                       id="email"
                       type="email"
                       value={profileData.email}
-                      onChange={(e) => setProfileData({ ...profileData, email: e.target.value })}
-                      disabled={!isEditing}
+                      disabled
                     />
                   </div>
                 </div>
