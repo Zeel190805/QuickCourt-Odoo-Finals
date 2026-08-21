@@ -1,61 +1,52 @@
-import { type NextRequest, NextResponse } from "next/server";
-import { dbConnect, User } from "@/lib/db";
+import { type NextRequest, NextResponse } from "next/server"
+import { dbConnect, User } from "@/lib/db"
+import { jsonError, requireAuth } from "@/lib/api"
+import { toPublicUser } from "@/lib/auth"
 
 export async function PUT(request: NextRequest) {
   try {
-    await dbConnect();
-    const { userId, profileData } = await request.json();
+    const auth = await requireAuth(request)
+    if (!auth.user) return auth.response
+    await dbConnect()
+    const body = await request.json()
+    const profileData = body.profileData || body
 
-    if (!userId || !profileData) {
-      return NextResponse.json({ 
-        error: "User ID and profile data are required" 
-      }, { status: 400 });
+    const name = typeof profileData.name === "string" ? profileData.name.trim() : ""
+    if (!name) {
+      return jsonError("Name is required", 400)
     }
 
-    // Find and update user profile
+    const updates: Record<string, unknown> = { name }
+    if (typeof profileData.phone === "string") updates.phone = profileData.phone.trim()
+    if (typeof profileData.location === "string") updates.location = profileData.location.trim()
+    if (typeof profileData.bio === "string") updates.bio = profileData.bio.trim()
+    if (profileData.preferences) {
+      if (typeof profileData.preferences.emailNotifications === "boolean") {
+        updates["preferences.emailNotifications"] = profileData.preferences.emailNotifications
+      }
+      if (typeof profileData.preferences.smsNotifications === "boolean") {
+        updates["preferences.smsNotifications"] = profileData.preferences.smsNotifications
+      }
+      if (["public", "friends", "private"].includes(profileData.preferences.privacyLevel)) {
+        updates["preferences.privacyLevel"] = profileData.preferences.privacyLevel
+      }
+    }
+
     const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      {
-        $set: {
-          name: profileData.name,
-          phone: profileData.phone,
-          location: profileData.location,
-          avatar: profileData.avatar,
-          bio: profileData.bio,
-          'preferences.emailNotifications': profileData.preferences?.emailNotifications,
-          'preferences.smsNotifications': profileData.preferences?.smsNotifications,
-          'preferences.privacyLevel': profileData.preferences?.privacyLevel,
-        }
-      },
+      auth.user.id,
+      { $set: updates },
       { new: true, runValidators: true }
-    );
+    )
 
     if (!updatedUser) {
-      return NextResponse.json({ 
-        error: "User not found" 
-      }, { status: 404 });
+      return jsonError("User not found", 404)
     }
 
     return NextResponse.json({
       message: "Profile updated successfully",
-      user: {
-        id: updatedUser._id,
-        name: updatedUser.name,
-        email: updatedUser.email,
-        role: updatedUser.role,
-        phone: updatedUser.phone,
-        location: updatedUser.location,
-        avatar: updatedUser.avatar,
-        bio: updatedUser.bio,
-        preferences: updatedUser.preferences,
-        isVerified: updatedUser.isVerified,
-      }
-    });
-
-  } catch (error) {
-    console.error("Error updating profile:", error);
-    return NextResponse.json({ 
-      error: "Internal server error" 
-    }, { status: 500 });
+      user: toPublicUser(updatedUser),
+    })
+  } catch {
+    return jsonError("Failed to update profile", 500)
   }
 }

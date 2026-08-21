@@ -1,57 +1,43 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/db'
-import { Alert } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, Alert } from "@/lib/db"
+import { jsonError, requireAuth } from "@/lib/api"
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
     await dbConnect()
-
-    const alerts = await Alert.find({})
-      .sort({ createdAt: -1 })
-      .lean()
-
+    const alerts = await Alert.find({}).sort({ createdAt: -1 }).lean()
     return NextResponse.json({ alerts })
-  } catch (error) {
-    console.error('Error fetching alerts:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch alerts' },
-      { status: 500 }
-    )
+  } catch {
+    return jsonError("Failed to fetch alerts", 500)
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
     await dbConnect()
     const body = await request.json()
-
-    const { type, title, message, category, priority } = body
-
-    // Validate input
+    const { type, title, message, category, priority, expiresAt } = body
     if (!type || !title || !message) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+      return jsonError("Missing required fields", 400)
     }
-
-    const alert = new Alert({
+    if (!["warning", "info", "success", "error"].includes(type)) {
+      return jsonError("Invalid alert type", 400)
+    }
+    const alert = await Alert.create({
       type,
-      title,
-      message,
-      category: category || 'system',
-      priority: priority || 'medium',
-      isActive: true
+      title: String(title).trim(),
+      message: String(message).trim(),
+      category: ["system", "security", "performance", "user"].includes(category) ? category : "system",
+      priority: ["low", "medium", "high", "critical"].includes(priority) ? priority : "medium",
+      isActive: true,
+      expiresAt: expiresAt ? new Date(expiresAt) : undefined,
     })
-
-    await alert.save()
-
     return NextResponse.json({ alert })
-  } catch (error) {
-    console.error('Error creating alert:', error)
-    return NextResponse.json(
-      { error: 'Failed to create alert' },
-      { status: 500 }
-    )
+  } catch {
+    return jsonError("Failed to create alert", 500)
   }
 }

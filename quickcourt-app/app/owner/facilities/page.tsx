@@ -1,6 +1,7 @@
 "use client";
 import React, { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useRouter } from "next/navigation";
 import {
   Table, TableHeader, TableBody, TableRow, TableHead, TableCell, TableCaption
 } from "@/components/ui/table";
@@ -84,7 +85,8 @@ function VenueForm({ initial, onSubmit, loading }: any) {
 }
 
 export default function FacilitiesPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
+  const router = useRouter();
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -94,17 +96,20 @@ export default function FacilitiesPage() {
 
   // Fetch venues for this owner
   useEffect(() => {
-    if (!user) return;
+    if (authLoading) return;
+    if (!user || user.role !== "owner") {
+      router.push("/auth/login");
+      return;
+    }
     setLoading(true);
     fetch("/api/venues")
-      .then(res => res.json())
-      .then(data => {
-        const ownerId = (user as any).id || (user as any)._id;
-        setVenues(data.filter((v: any) => String(v.owner) === String(ownerId)));
-        setLoading(false);
+      .then((res) => res.json())
+      .then((data) => {
+        setVenues(Array.isArray(data) ? data : []);
       })
-      .catch(() => setLoading(false));
-  }, [user]);
+      .catch(() => setVenues([]))
+      .finally(() => setLoading(false));
+  }, [user, authLoading, router]);
 
   const parseSports = (sportsText: string | undefined) => {
     return String(sportsText || "")
@@ -278,6 +283,7 @@ export default function FacilitiesPage() {
             <TableHead>Status</TableHead>
             <TableHead>Min</TableHead>
             <TableHead>Max</TableHead>
+            <TableHead>Courts</TableHead>
             <TableHead>Actions</TableHead>
           </TableRow>
         </TableHeader>

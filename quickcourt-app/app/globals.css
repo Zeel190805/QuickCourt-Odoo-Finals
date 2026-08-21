@@ -81,22 +81,3 @@
     @apply bg-background text-foreground;
   }
 }
-
-/* Chat Widget Custom Styles */
-.chat-widget-container {
-  position: fixed !important;
-  bottom: 20px !important;
-  left: 20px !important;
-  z-index: 9999 !important;
-}
-
-/* Override any default chat widget positioning */
-#cd-widget {
-  position: relative !important;
-}
-
-/* Ensure chat widget iframe or container stays on left side */
-#cd-widget iframe,
-#cd-widget > div {
-  position: relative !important;
-}

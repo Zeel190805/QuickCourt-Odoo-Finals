@@ -1,54 +1,80 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect, Court } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, Booking, Court } from "@/lib/db"
+import { deleteCourtCascade, isValidObjectId, jsonError, requireAuth, requireVenueAccess } from "@/lib/api"
+import { localDateString } from "@/lib/dates"
 
-// GET /api/courts/[id] - fetch a single court
 export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    if (!isValidObjectId(params.id)) return jsonError("Invalid court id", 400)
     await dbConnect()
     const court = await Court.findById(params.id)
-    if (!court) return NextResponse.json({ error: 'Court not found' }, { status: 404 })
+    if (!court) return jsonError("Court not found", 404)
     return NextResponse.json(court)
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to load court' }, { status: 500 })
+  } catch {
+    return jsonError("Failed to load court", 500)
   }
 }
 
-// PUT /api/courts/[id] - replace/update a court
+async function updateCourt(req: NextRequest, id: string) {
+  const auth = await requireAuth(req, ["owner", "admin"])
+  if (!auth.user) return auth.response
+  if (!isValidObjectId(id)) return jsonError("Invalid court id", 400)
+  await dbConnect()
+  const court = await Court.findById(id)
+  if (!court) return jsonError("Court not found", 404)
+  const access = await requireVenueAccess(String(court.venue), auth.user)
+  if (!access.ok) return access.response
+  const data = await req.json()
+  const updates: Record<string, unknown> = {}
+  if (typeof data.name === "string") updates.name = data.name.trim()
+  if (typeof data.sport === "string") updates.sport = data.sport.trim()
+  if (data.basePricePerHour !== undefined) {
+    const price = Number(data.basePricePerHour)
+    if (Number.isNaN(price) || price <= 0) return jsonError("Invalid price", 400)
+    updates.basePricePerHour = price
+  }
+  if (typeof data.isActive === "boolean") updates.isActive = data.isActive
+  const updated = await Court.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true })
+  return NextResponse.json(updated)
+}
+
 export async function PUT(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await dbConnect()
-    const data = await req.json()
-    const updated = await Court.findByIdAndUpdate(params.id, data, { new: true })
-    if (!updated) return NextResponse.json({ error: 'Court not found' }, { status: 404 })
-    return NextResponse.json(updated)
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to update court' }, { status: 400 })
+    return await updateCourt(req, params.id)
+  } catch {
+    return jsonError("Failed to update court", 400)
   }
 }
 
-// PATCH /api/courts/[id] - partial update
 export async function PATCH(req: NextRequest, { params }: { params: { id: string } }) {
   try {
-    await dbConnect()
-    const data = await req.json()
-    const updated = await Court.findByIdAndUpdate(params.id, { $set: data }, { new: true })
-    if (!updated) return NextResponse.json({ error: 'Court not found' }, { status: 404 })
-    return NextResponse.json(updated)
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to update court' }, { status: 400 })
+    return await updateCourt(req, params.id)
+  } catch {
+    return jsonError("Failed to update court", 400)
   }
 }
 
-// DELETE /api/courts/[id]
-export async function DELETE(_req: NextRequest, { params }: { params: { id: string } }) {
+export async function DELETE(req: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireAuth(req, ["owner", "admin"])
+    if (!auth.user) return auth.response
+    if (!isValidObjectId(params.id)) return jsonError("Invalid court id", 400)
     await dbConnect()
-    const deleted = await Court.findByIdAndDelete(params.id)
-    if (!deleted) return NextResponse.json({ error: 'Court not found' }, { status: 404 })
+    const court = await Court.findById(params.id)
+    if (!court) return jsonError("Court not found", 404)
+    const access = await requireVenueAccess(String(court.venue), auth.user)
+    if (!access.ok) return access.response
+    const upcoming = await Booking.countDocuments({
+      court: params.id,
+      status: "confirmed",
+      date: { $gte: localDateString() },
+    })
+    if (upcoming > 0) {
+      return jsonError("Cannot delete a court with upcoming confirmed bookings", 409)
+    }
+    await deleteCourtCascade(params.id, String(court.venue))
     return NextResponse.json({ success: true })
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message || 'Failed to delete court' }, { status: 400 })
+  } catch {
+    return jsonError("Failed to delete court", 400)
   }
 }
-
-

@@ -136,8 +136,8 @@ export default function LoginPage() {
 
     setIsLoading(true)
     try {
-      const success = await login(email, password)
-      if (success) {
+      const result = await login(email, password)
+      if (result.ok) {
         toast({
           title: "Login successful",
           description: "Welcome back to QuickCourt!",
@@ -146,7 +146,7 @@ export default function LoginPage() {
       } else {
         toast({
           title: "Login failed",
-          description: "Invalid email or password",
+          description: result.error || "Invalid email or password",
           variant: "destructive",
         })
       }

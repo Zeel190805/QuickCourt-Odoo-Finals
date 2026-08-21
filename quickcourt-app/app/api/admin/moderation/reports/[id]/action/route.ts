@@ -1,51 +1,50 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/db'
-import { Report } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, Report, User, Venue } from "@/lib/db"
+import { isValidObjectId, jsonError, requireAuth } from "@/lib/api"
 
-export async function PUT(
-  request: NextRequest,
-  { params }: { params: { id: string } }
-) {
+export async function PUT(request: NextRequest, { params }: { params: { id: string } }) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
+    if (!isValidObjectId(params.id)) return jsonError("Invalid report id", 400)
     await dbConnect()
-    const { id } = params
     const body = await request.json()
+    const { action, moderatorNotes } = body
+    const allowed = ["warn", "suspend", "ban", "remove_content", "dismiss", "none"]
+    if (!allowed.includes(action)) return jsonError("Invalid action", 400)
 
-    const { action, moderatorNotes, status } = body
+    const report = await Report.findById(params.id)
+    if (!report) return jsonError("Report not found", 404)
 
-    // Validate input
-    if (!action || !status) {
-      return NextResponse.json(
-        { error: 'Missing required fields' },
-        { status: 400 }
-      )
+    const targetId = report.reportedItem?._id
+    const targetType = report.reportedItem?.type || report.type
+    let status = "resolved"
+
+    if (action === "dismiss") {
+      status = "dismissed"
+    } else if (targetId && isValidObjectId(String(targetId))) {
+      if (targetType === "user" || report.type === "user") {
+        if (action === "ban") {
+          await User.findByIdAndUpdate(targetId, { accountStatus: "banned" })
+        } else if (action === "suspend") {
+          await User.findByIdAndUpdate(targetId, { accountStatus: "suspended" })
+        }
+      }
+      if (targetType === "venue" || report.type === "venue") {
+        if (action === "suspend" || action === "remove_content") {
+          await Venue.findByIdAndUpdate(targetId, { status: "suspended" })
+        }
+      }
     }
 
-    // Update report
     const updatedReport = await Report.findByIdAndUpdate(
-      id,
-      {
-        action,
-        moderatorNotes,
-        status,
-        updatedAt: new Date()
-      },
+      params.id,
+      { action, moderatorNotes: String(moderatorNotes || ""), status },
       { new: true, runValidators: true }
-    ).populate('reporter', 'name email')
-
-    if (!updatedReport) {
-      return NextResponse.json(
-        { error: 'Report not found' },
-        { status: 404 }
-      )
-    }
+    ).populate("reporter", "name email")
 
     return NextResponse.json({ report: updatedReport })
-  } catch (error) {
-    console.error('Error updating report action:', error)
-    return NextResponse.json(
-      { error: 'Failed to update report action' },
-      { status: 500 }
-    )
+  } catch {
+    return jsonError("Failed to update report action", 500)
   }
 }

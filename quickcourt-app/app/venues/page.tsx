@@ -35,11 +35,15 @@ export default function VenuesPage() {
   useEffect(() => {
     setIsLoading(true)
     fetch("/api/venues")
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data: VenueApi[]) => {
-        const approved = data.filter((v) => v.status === "approved")
-        setVenues(approved)
-        setFilteredVenues(approved)
+        const list = Array.isArray(data) ? data.filter((v) => v.status === "approved") : []
+        setVenues(list)
+        setFilteredVenues(list)
+      })
+      .catch(() => {
+        setVenues([])
+        setFilteredVenues([])
       })
       .finally(() => setIsLoading(false))
   }, [])

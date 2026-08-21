@@ -1,163 +1,142 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { emailService, type BookingEmailData } from "@/lib/email"
 import { dbConnect, Booking, TimeSlot, User, Venue, Court } from "@/lib/db"
+import { isValidObjectId, jsonError, requireAuth } from "@/lib/api"
+import { appUrl } from "@/lib/utils"
+import { bookingDateTime, consecutiveHourTimes, formatBookingDate, isValidTime, parseLocalDate } from "@/lib/dates"
 
 export async function POST(request: NextRequest) {
   try {
-    console.log("🔍 Booking confirmation request received")
-    
-    await dbConnect()
-    console.log("✅ Database connected successfully")
-    
-    const bookingData = await request.json()
-    console.log("📦 Received booking data:", JSON.stringify(bookingData, null, 2))
+    const auth = await requireAuth(request, ["user", "owner", "admin"])
+    if (!auth.user) return auth.response
 
-    // Validate required fields up-front
-    const errors: string[] = []
-    const required = [
-      [bookingData.userId, 'userId'],
-      [bookingData.venueId, 'venueId'],
-      [bookingData.courtId || bookingData.court, 'courtId'],
-      [bookingData.date, 'date'],
-      [bookingData.time, 'time'],
-      [bookingData.totalAmount, 'totalAmount'],
-    ] as const
-    required.forEach(([val, name]) => { 
-      if (val === undefined || val === null || val === '') {
-        errors.push(String(name))
-        console.log(`❌ Missing required field: ${name} = ${val}`)
-      } else {
-        console.log(`✅ Field ${name} is present: ${val}`)
-      }
-    })
-    
-    if (errors.length) {
-      console.log(`❌ Validation failed. Missing fields: ${errors.join(', ')}`)
-      return NextResponse.json({ error: `Missing required fields: ${errors.join(', ')}` }, { status: 400 })
+    await dbConnect()
+    const bookingData = await request.json()
+
+    const venueId = bookingData.venueId
+    const courtId = bookingData.courtId || bookingData.court
+    const date = bookingData.date
+    const time = bookingData.time
+    const duration = Number(bookingData.duration || 1)
+
+    if (!isValidObjectId(venueId) || !isValidObjectId(courtId)) {
+      return jsonError("Invalid venue or court id", 400)
+    }
+    if (!parseLocalDate(date) || !isValidTime(time)) {
+      return jsonError("Invalid date or time", 400)
+    }
+    if (!Number.isInteger(duration) || duration < 1 || duration > 8) {
+      return jsonError("Duration must be between 1 and 8 hours", 400)
     }
 
-    console.log("✅ All required fields validated")
+    const start = bookingDateTime(date, time)
+    if (!start || start.getTime() <= Date.now()) {
+      return jsonError("Cannot book a past time slot", 400)
+    }
 
-    // Verify that user, venue, and court exist
     const [user, venue, court] = await Promise.all([
-      User.findById(bookingData.userId),
-      Venue.findById(bookingData.venueId),
-      Court.findById(bookingData.courtId || bookingData.court)
+      User.findById(auth.user.id),
+      Venue.findById(venueId),
+      Court.findById(courtId),
     ])
 
-    if (!user) {
-      console.log("❌ User not found:", bookingData.userId)
-      return NextResponse.json({ error: "User not found" }, { status: 404 })
+    if (!user) return jsonError("User not found", 404)
+    if (!venue) return jsonError("Venue not found", 404)
+    if (!court) return jsonError("Court not found", 404)
+    if (venue.status !== "approved") return jsonError("Venue is not available for booking", 400)
+    if (!court.isActive) return jsonError("Court is not active", 400)
+    if (String(court.venue) !== String(venue._id)) return jsonError("Court does not belong to this venue", 400)
+
+    const times = consecutiveHourTimes(time, duration)
+    if (times.length !== duration) {
+      return jsonError("Duration extends past midnight and is not supported", 400)
     }
 
-    if (!venue) {
-      console.log("❌ Venue not found:", bookingData.venueId)
-      return NextResponse.json({ error: "Venue not found" }, { status: 404 })
+    const claimed: Array<{ _id: unknown; price: number; time: string }> = []
+    try {
+      for (const slotTime of times) {
+        const slot = await TimeSlot.findOneAndUpdate(
+          { court: courtId, date, time: slotTime, isAvailable: true },
+          { isAvailable: false },
+          { new: true }
+        )
+        if (!slot) {
+          throw new Error("UNAVAILABLE")
+        }
+        claimed.push({ _id: slot._id, price: slot.price, time: slotTime })
+      }
+    } catch (err) {
+      await TimeSlot.updateMany({ _id: { $in: claimed.map((c) => c._id) } }, { $set: { isAvailable: true } })
+      if (err instanceof Error && err.message === "UNAVAILABLE") {
+        return jsonError("Selected time slot is no longer available", 409)
+      }
+      throw err
     }
 
-    if (!court) {
-      console.log("❌ Court not found:", bookingData.courtId || bookingData.court)
-      return NextResponse.json({ error: "Court not found" }, { status: 404 })
+    const totalAmount = claimed.reduce((sum, slot) => sum + Number(slot.price), 0)
+
+    let created
+    try {
+      created = await Booking.create({
+        user: auth.user.id,
+        venue: venueId,
+        court: courtId,
+        date,
+        time,
+        duration,
+        totalAmount,
+        status: "confirmed",
+        customerName: user.name,
+        customerEmail: user.email,
+        venueName: venue.name,
+        venueLocation: venue.location,
+        courtName: court.name,
+        sport: court.sport,
+        paymentStatus: "completed",
+        paymentMethod: "online",
+      })
+    } catch (err: unknown) {
+      await TimeSlot.updateMany({ _id: { $in: claimed.map((c) => c._id) } }, { $set: { isAvailable: true } })
+      const code = (err as { code?: number }).code
+      if (code === 11000) {
+        return jsonError("Selected time slot is no longer available", 409)
+      }
+      throw err
     }
 
-    console.log("✅ User, venue, and court verified")
-
-    // Check if the timeslot is still available
-    const existingTimeslot = await TimeSlot.findOne({
-      court: bookingData.courtId || bookingData.court,
-      date: bookingData.date,
-      time: bookingData.time,
-      isAvailable: true
-    })
-
-    if (!existingTimeslot) {
-      console.log("❌ Timeslot not available:", bookingData.date, bookingData.time)
-      return NextResponse.json({ error: "Selected time slot is no longer available" }, { status: 409 })
-    }
-
-    console.log("✅ Timeslot availability confirmed")
-
-    const bookingPayload = {
-      user: bookingData.userId,
-      venue: bookingData.venueId,
-      court: bookingData.courtId || bookingData.court,
-      date: bookingData.date,
-      time: bookingData.time,
-      duration: Number(bookingData.duration || 1),
-      totalAmount: Number(bookingData.totalAmount),
-      status: 'confirmed',
-      // Add additional booking details for better tracking
-      customerName: bookingData.customerName || user.name,
-      customerEmail: bookingData.customerEmail || user.email,
-      venueName: bookingData.venueName || venue.name,
-      venueLocation: bookingData.venueLocation || venue.location,
-      courtName: bookingData.courtName || court.name,
-      sport: bookingData.sport || court.sport,
-    }
-    
-    console.log("📝 Creating booking with payload:", JSON.stringify(bookingPayload, null, 2))
-
-    const created = await Booking.create(bookingPayload)
-    console.log("✅ Booking created successfully:", created._id)
-
-    // Mark the timeslot unavailable
-    const timeslotUpdate = await TimeSlot.findOneAndUpdate(
-      { court: created.court, date: created.date, time: created.time }, 
-      { isAvailable: false }
-    )
-    console.log("✅ Timeslot updated:", timeslotUpdate ? "found and updated" : "not found")
-
-    // Prepare email data
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const emailData: BookingEmailData = {
-      customerName: bookingData.customerName || user.name,
-      customerEmail: bookingData.customerEmail || user.email,
+      customerName: user.name,
+      customerEmail: user.email,
       bookingId: String(created._id),
-      venueName: bookingData.venueName || venue.name,
-      venueLocation: bookingData.venueLocation || venue.location,
-      venueAddress: bookingData.venueAddress || "Address not provided",
-      venuePhone: bookingData.venuePhone || "+1 (555) 123-4567",
-      courtName: bookingData.courtName || court.name,
-      sport: bookingData.sport || court.sport,
-      bookingDate: new Date(bookingData.date).toLocaleDateString("en-US", {
-        weekday: "long",
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-      }),
-      bookingTime: bookingData.time,
-      duration: bookingData.duration,
-      totalAmount: bookingData.totalAmount,
-      bookingUrl: `${appUrl}/bookings`,
-      venueUrl: `${appUrl}/venues/${bookingData.venueId}`,
+      venueName: venue.name,
+      venueLocation: venue.location,
+      venueAddress: venue.location,
+      courtName: court.name,
+      sport: court.sport,
+      bookingDate: formatBookingDate(date),
+      bookingTime: time,
+      duration,
+      totalAmount,
+      bookingUrl: `${appUrl()}/bookings`,
+      venueUrl: `${appUrl()}/venues/${venueId}`,
     }
 
-    console.log("📧 Preparing email data:", JSON.stringify(emailData, null, 2))
-
-    // Send confirmation email (do not fail the request if email fails)
     let emailSent = false
     try {
       emailSent = await emailService.sendBookingConfirmation(emailData)
-      console.log("📧 Email sending result:", emailSent)
     } catch (e) {
-      console.warn('❌ Email sending failed', e)
+      console.warn("Email sending failed", e)
     }
 
-    if (!emailSent) {
-      console.warn("⚠️ Failed to send booking confirmation email")
-    }
-
-    console.log("🎉 Booking confirmation completed successfully")
-    return NextResponse.json({ 
-      success: true, 
-      booking: created, 
-      emailSent, 
+    return NextResponse.json({
+      success: true,
+      booking: created,
+      emailSent,
       message: "Booking confirmed successfully",
-      bookingId: String(created._id)
+      bookingId: String(created._id),
     })
-  } catch (error: any) {
-    console.error("❌ Booking confirmation error:", error?.message || error)
-    console.error("❌ Full error object:", error)
-    return NextResponse.json({ error: error?.message || "Failed to confirm booking" }, { status: 500 })
+  } catch (error: unknown) {
+    console.error("Booking confirmation error:", error)
+    return NextResponse.json({ error: "Failed to confirm booking" }, { status: 500 })
   }
 }

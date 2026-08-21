@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MapPin, Star, Clock, Users, Wifi, Car, Coffee, Dumbbell, ArrowLeft } from "lucide-react"
+import { localDateString } from "@/lib/dates"
 import Link from "next/link"
 
 interface VenueApi {
@@ -34,13 +35,15 @@ export default function VenueDetailsPage() {
   const [slots, setSlots] = useState<any[]>([])
 
   useEffect(() => {
-    const id = params.id as string
+    const id = String(params?.id || "")
+    if (!id) return
     setIsLoading(true)
     fetch(`/api/venues/${id}`)
-      .then((r) => r.json())
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
       .then((data) => setVenue(data))
+      .catch(() => setVenue(null))
       .finally(() => setIsLoading(false))
-  }, [params.id])
+  }, [params?.id])
 
   useEffect(() => {
     if (!venue?._id) return
@@ -55,8 +58,8 @@ export default function VenueDetailsPage() {
   useEffect(() => {
     const load = async () => {
       if (!selectedCourt || !selectedDate || !venue?._id) return setSlots([])
-      const date = selectedDate.toISOString().slice(0, 10)
-      const res = await fetch(`/api/timeslots?venue=${venue._id}&court=${selectedCourt}&date=${date}&cleanup=1`)
+      const date = localDateString(selectedDate)
+      const res = await fetch(`/api/timeslots?venue=${venue._id}&court=${selectedCourt}&date=${date}`)
       const data = await res.json()
       setSlots(Array.isArray(data) ? data : [])
     }
@@ -265,8 +268,8 @@ export default function VenueDetailsPage() {
                     <div>
                       <div className="text-sm font-medium mb-2">Available Time Slots</div>
                       <div className="grid grid-cols-2 gap-2">
-                        {slots.map((s) => (
-                          <Button key={s._id} variant="outline" onClick={() => router.push(`/booking/${venue!._id}/${selectedCourt}?date=${selectedDate!.toISOString().slice(0,10)}&time=${s.time}`)}>
+                        {slots.filter((s) => s.isAvailable).map((s) => (
+                          <Button key={s._id} variant="outline" onClick={() => router.push(`/booking/${venue!._id}/${selectedCourt}?date=${localDateString(selectedDate!)}&time=${s.time}`)}>
                             <div className="text-left">
                               <div className="font-semibold">{s.time}</div>
                               <div className="text-xs">₹{s.price}</div>

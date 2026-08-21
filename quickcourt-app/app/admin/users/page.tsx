@@ -38,7 +38,7 @@ interface UserStats {
 }
 
 export default function UserManagement() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
@@ -66,6 +66,7 @@ export default function UserManagement() {
   })
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "admin") {
       router.push("/auth/login")
       return
@@ -73,7 +74,7 @@ export default function UserManagement() {
 
     fetchUsers()
     fetchStats()
-  }, [user, router])
+  }, [user, router, authLoading])
 
   const fetchUsers = async () => {
     try {
@@ -301,7 +302,7 @@ export default function UserManagement() {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold">{stats.verifiedUsers}</div>
-              <p className="text-xs text-muted-foreground">{((stats.verifiedUsers / stats.totalUsers) * 100).toFixed(1)}% of total</p>
+              <p className="text-xs text-muted-foreground">{stats.totalUsers > 0 ? `${((stats.verifiedUsers / stats.totalUsers) * 100).toFixed(1)}% of users` : "No users yet"}</p>
             </CardContent>
           </Card>
           <Card>

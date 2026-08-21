@@ -1,33 +1,27 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/db'
-import { User } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, User } from "@/lib/db"
+import { jsonError, requireAuth } from "@/lib/api"
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
     await dbConnect()
 
-    // Get current date and calculate date ranges
     const now = new Date()
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
-    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1)
-
-    // Get total counts
-    const totalUsers = await User.countDocuments({ role: 'user' })
-    const totalOwners = await User.countDocuments({ role: 'owner' })
-    const totalAdmins = await User.countDocuments({ role: 'admin' })
-    const verifiedUsers = await User.countDocuments({ isVerified: true })
-    const unverifiedUsers = await User.countDocuments({ isVerified: false })
-
-    // Get new users this month
-    const newUsersThisMonth = await User.countDocuments({
-      createdAt: { $gte: startOfMonth }
-    })
-
-    // Get active users (users who have logged in within last 30 days)
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
-    const activeUsers = await User.countDocuments({
-      lastLogin: { $gte: thirtyDaysAgo }
-    })
+
+    const [totalUsers, totalOwners, totalAdmins, verifiedUsers, unverifiedUsers, newUsersThisMonth, activeUsers] =
+      await Promise.all([
+        User.countDocuments({ role: "user" }),
+        User.countDocuments({ role: "owner" }),
+        User.countDocuments({ role: "admin" }),
+        User.countDocuments({ role: "user", isVerified: true }),
+        User.countDocuments({ role: "user", isVerified: false }),
+        User.countDocuments({ role: "user", createdAt: { $gte: startOfMonth } }),
+        User.countDocuments({ lastLogin: { $gte: thirtyDaysAgo } }),
+      ])
 
     return NextResponse.json({
       totalUsers,
@@ -36,13 +30,10 @@ export async function GET(request: NextRequest) {
       verifiedUsers,
       unverifiedUsers,
       activeUsers,
-      newUsersThisMonth
+      newUsersThisMonth,
     })
   } catch (error) {
-    console.error('Error fetching user stats:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch user statistics' },
-      { status: 500 }
-    )
+    console.error("Error fetching user stats:", error)
+    return jsonError("Failed to fetch user statistics", 500)
   }
 }

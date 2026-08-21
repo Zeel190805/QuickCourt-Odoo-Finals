@@ -7,38 +7,44 @@ import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
 
 export default function AdminFacilitiesPage() {
-  const { user } = useAuth();
+  const { user, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const [venues, setVenues] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "admin") {
       router.push("/auth/login");
       return;
     }
     setLoading(true);
     fetch("/api/venues")
-      .then((r) => r.json())
-      .then((data) => setVenues(data))
+      .then((r) => (r.ok ? r.json() : Promise.reject()))
+      .then((data) => setVenues(Array.isArray(data) ? data : []))
+      .catch(() => setVenues([]))
       .finally(() => setLoading(false));
-  }, [user, router]);
+  }, [user, router, authLoading]);
 
   const approveVenue = async (id: string) => {
     setLoading(true);
-    await fetch(`/api/venues/${id}`, {
+    const res = await fetch(`/api/venues/${id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status: "approved" }),
     });
-    setVenues((prev) => prev.map((v) => (v._id === id ? { ...v, status: "approved" } : v)));
+    if (res.ok) {
+      setVenues((prev) => prev.map((v) => (v._id === id ? { ...v, status: "approved" } : v)));
+    }
     setLoading(false);
   };
 
   const deleteVenue = async (id: string) => {
     setLoading(true);
-    await fetch(`/api/venues/${id}`, { method: "DELETE" });
-    setVenues((prev) => prev.filter((v) => v._id !== id));
+    const res = await fetch(`/api/venues/${id}`, { method: "DELETE" });
+    if (res.ok) {
+      setVenues((prev) => prev.filter((v) => v._id !== id));
+    }
     setLoading(false);
   };
 
@@ -65,7 +71,7 @@ export default function AdminFacilitiesPage() {
           {venues.map((v) => (
             <TableRow key={v._id}>
               <TableCell className="font-medium">{v.name}</TableCell>
-              <TableCell>{String(v.owner)}</TableCell>
+              <TableCell>{typeof v.owner === "object" && v.owner?.name ? v.owner.name : "Unknown"}</TableCell>
               <TableCell>{v.location}</TableCell>
               <TableCell>
                 {v.status === "approved" ? (

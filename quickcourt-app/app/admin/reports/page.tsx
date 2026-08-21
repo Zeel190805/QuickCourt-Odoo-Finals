@@ -79,7 +79,7 @@ interface ReportData {
 }
 
 export default function Reports() {
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const router = useRouter()
   const [reportData, setReportData] = useState<ReportData>({
     revenue: { total: 0, monthly: 0, growth: 0, trend: [] },
@@ -95,13 +95,14 @@ export default function Reports() {
   const [reportType, setReportType] = useState("overview")
 
   useEffect(() => {
+    if (authLoading) return
     if (!user || user.role !== "admin") {
       router.push("/auth/login")
       return
     }
 
     fetchReportData()
-  }, [user, router, timeRange])
+  }, [user, router, timeRange, authLoading])
 
   const fetchReportData = async () => {
     try {
@@ -229,7 +230,7 @@ export default function Reports() {
                   <SelectItem value="365">Last year</SelectItem>
                 </SelectContent>
               </Select>
-              <Button onClick={() => exportReport('comprehensive')}>
+              <Button onClick={() => exportReport('bookings')}>
                 <Download className="h-4 w-4 mr-2" />
                 Export
               </Button>
@@ -320,7 +321,7 @@ export default function Reports() {
                     <CartesianGrid strokeDasharray="3 3" />
                     <XAxis dataKey="month" />
                     <YAxis />
-                    <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]} />
+                    <Tooltip formatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]} />
                     <Line type="monotone" dataKey="revenue" stroke="#8884d8" strokeWidth={2} />
                   </RechartsLineChart>
                 </ResponsiveContainer>
@@ -400,7 +401,7 @@ export default function Reports() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="venue" />
                       <YAxis />
-                      <Tooltip formatter={(value) => [`₹${value.toLocaleString()}`, "Revenue"]} />
+                      <Tooltip formatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]} />
                       <Bar dataKey="revenue" fill="#82ca9d" />
                     </RechartsBarChart>
                   </ResponsiveContainer>
@@ -418,7 +419,7 @@ export default function Reports() {
                       <CartesianGrid strokeDasharray="3 3" />
                       <XAxis dataKey="month" />
                       <YAxis />
-                      <Tooltip formatter={(value) => [`$₹{value.toLocaleString()}`, "Revenue"]} />
+                      <Tooltip formatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]} />
                       <Bar dataKey="revenue" fill="#8884d8" />
                     </RechartsBarChart>
                   </ResponsiveContainer>
@@ -443,7 +444,10 @@ export default function Reports() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ sport, percentage }) => `${sport} ${percentage}%`}
+                        label={(props) => {
+                          const payload = props as { sport?: string; percentage?: number }
+                          return `${payload.sport ?? ""} ${payload.percentage ?? 0}%`
+                        }}
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="count"
@@ -521,7 +525,10 @@ export default function Reports() {
                         cx="50%"
                         cy="50%"
                         labelLine={false}
-                        label={({ role, percentage }) => `${role} ${percentage}%`}
+                        label={(props) => {
+                          const payload = props as { role?: string; percentage?: number }
+                          return `${payload.role ?? ""} ${payload.percentage ?? 0}%`
+                        }}
                         outerRadius={80}
                         fill="#8884d8"
                         dataKey="count"

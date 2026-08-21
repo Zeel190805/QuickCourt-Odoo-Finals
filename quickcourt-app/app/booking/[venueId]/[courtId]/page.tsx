@@ -10,6 +10,7 @@ import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, MapPin, CreditCard } from "lucide-react"
 import Link from "next/link"
+import { localDateString, startOfToday } from "@/lib/dates"
 
 interface TimeSlot {
   _id?: string
@@ -45,7 +46,7 @@ export default function BookingPage() {
   const params = useParams()
   const search = useSearchParams()
   const router = useRouter()
-  const { user } = useAuth()
+  const { user, isLoading: authLoading } = useAuth()
   const { toast } = useToast()
 
   const [bookingData, setBookingData] = useState<BookingData>({
@@ -62,6 +63,7 @@ export default function BookingPage() {
   const [isBooking, setIsBooking] = useState(false)
 
   useEffect(() => {
+    if (authLoading) return
     if (!user) {
       router.push("/auth/login")
       return
@@ -69,8 +71,8 @@ export default function BookingPage() {
 
     const loadVenueAndCourtData = async () => {
       try {
-        const venueId = String(params.venueId)
-        const courtId = String(params.courtId)
+        const venueId = String(params?.venueId || "")
+        const courtId = String(params?.courtId || "")
         
         console.log("🔍 Loading venue and court data...")
         console.log("🔍 Venue ID:", venueId)
@@ -109,19 +111,13 @@ export default function BookingPage() {
         }))
 
         // Preselect date/time from query if provided
-        const qDate = search.get('date')
-        const qTime = search.get('time')
+        const qDate = search?.get("date")
+        const qTime = search?.get("time")
         if (qDate) {
-          const parsed = new Date(qDate)
-          if (!isNaN(parsed.getTime())) {
-            setBookingData((prev) => ({ ...prev, selectedDate: parsed }))
+          const [y, m, d] = qDate.split("-").map(Number)
+          if (y && m && d) {
+            setBookingData((prev) => ({ ...prev, selectedDate: new Date(y, m - 1, d) }))
           }
-        }
-        if (qTime) {
-          // selected time will be matched once slots are loaded
-          setTimeout(() => {
-            setAvailableSlots((prev) => prev)
-          }, 0)
         }
       } catch (error) {
         console.error('❌ Error loading venue/court data:', error)
@@ -144,9 +140,8 @@ export default function BookingPage() {
       if (!bookingData.selectedDate || !bookingData.venue || !bookingData.court) return setAvailableSlots([])
       
       try {
-        const date = bookingData.selectedDate.toISOString().slice(0, 10)
-        // Hide past slots and clean up passed ones
-        const res = await fetch(`/api/timeslots?venue=${bookingData.venue._id}&court=${bookingData.court._id}&date=${date}&cleanup=1`)
+        const date = localDateString(bookingData.selectedDate)
+        const res = await fetch(`/api/timeslots?venue=${bookingData.venue._id}&court=${bookingData.court._id}&date=${date}`)
         if (!res.ok) {
           throw new Error('Failed to load time slots')
         }
@@ -159,9 +154,9 @@ export default function BookingPage() {
         }))
         setAvailableSlots(slots)
         
-        const qTime = search.get('time')
+        const qTime = search?.get("time")
         if (qTime) {
-          const match = slots.find((s) => s.time === qTime && s.isAvailable)
+          const match = slots.find((s: TimeSlot) => s.time === qTime && s.isAvailable)
           if (match) setBookingData((prev) => ({ ...prev, selectedTimeSlot: match }))
         }
       } catch (error) {
@@ -178,8 +173,12 @@ export default function BookingPage() {
 
   useEffect(() => {
     if (bookingData.selectedTimeSlot && bookingData.duration) {
-      const totalPrice = bookingData.selectedTimeSlot.price * bookingData.duration
-      setBookingData((prev) => ({ ...prev, totalPrice }))
+      setBookingData((prev) => ({
+        ...prev,
+        totalPrice: prev.selectedTimeSlot ? prev.selectedTimeSlot.price * prev.duration : 0,
+      }))
+    } else {
+      setBookingData((prev) => ({ ...prev, totalPrice: 0 }))
     }
   }, [bookingData.selectedTimeSlot, bookingData.duration])
 
@@ -239,7 +238,7 @@ export default function BookingPage() {
         courtId: bookingData.court._id,
         courtName: bookingData.court.name,
         sport: bookingData.court.sport,
-        date: bookingData.selectedDate.toISOString().split("T")[0],
+        date: localDateString(bookingData.selectedDate),
         time: bookingData.selectedTimeSlot.time,
         duration: bookingData.duration,
         totalAmount: bookingData.totalPrice,
@@ -281,8 +280,8 @@ export default function BookingPage() {
             variant: "destructive" 
           })
           // Refresh available slots
-          const date = bookingData.selectedDate.toISOString().slice(0, 10)
-          const res = await fetch(`/api/timeslots?venue=${bookingData.venue._id}&court=${bookingData.court._id}&date=${date}&cleanup=1`)
+          const date = localDateString(bookingData.selectedDate)
+          const res = await fetch(`/api/timeslots?venue=${bookingData.venue._id}&court=${bookingData.court._id}&date=${date}`)
           if (res.ok) {
             const data = await res.json()
             const slots = (data || []).map((s: any) => ({ 
@@ -408,7 +407,7 @@ export default function BookingPage() {
                   mode="single"
                   selected={bookingData.selectedDate || undefined}
                   onSelect={handleDateSelect}
-                  disabled={(date) => date < new Date() || date < new Date("1900-01-01")}
+                  disabled={(date) => date < startOfToday()}
                   className="rounded-md border"
                 />
               </CardContent>
@@ -425,7 +424,7 @@ export default function BookingPage() {
                   <div className="grid grid-cols-4 gap-3">
                     {availableSlots.map((slot) => (
                       <Button
-                        key={slot.time}
+                        key={slot._id || slot.time}
                         variant={
                           bookingData.selectedTimeSlot?.time === slot.time
                             ? "default"

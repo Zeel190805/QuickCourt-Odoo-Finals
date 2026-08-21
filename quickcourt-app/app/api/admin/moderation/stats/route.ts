@@ -1,47 +1,26 @@
-import { NextRequest, NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/db'
-import { Report, Alert, User, Venue } from '@/lib/db'
+import { NextRequest, NextResponse } from "next/server"
+import { dbConnect, Report, Alert, User, Venue } from "@/lib/db"
+import { jsonError, requireAuth } from "@/lib/api"
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, ["admin"])
+    if (!auth.user) return auth.response
     await dbConnect()
 
-    // Report statistics
-    const totalReports = await Report.countDocuments({})
-    const pendingReports = await Report.countDocuments({ status: 'pending' })
-    const resolvedReports = await Report.countDocuments({ status: 'resolved' })
+    const [totalReports, pendingReports, resolvedReports, activeAlerts, bannedUsers, suspendedVenues, reportsByType, reportsByPriority] =
+      await Promise.all([
+        Report.countDocuments({}),
+        Report.countDocuments({ status: "pending" }),
+        Report.countDocuments({ status: "resolved" }),
+        Alert.countDocuments({ isActive: true }),
+        User.countDocuments({ accountStatus: "banned" }),
+        Venue.countDocuments({ status: "suspended" }),
+        Report.aggregate([{ $group: { _id: "$type", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+        Report.aggregate([{ $group: { _id: "$priority", count: { $sum: 1 } } }, { $sort: { count: -1 } }]),
+      ])
 
-    // Alert statistics
-    const activeAlerts = await Alert.countDocuments({ isActive: true })
-
-    // User moderation statistics (assuming banned users have a banned field)
-    const bannedUsers = await User.countDocuments({ role: 'banned' })
-    const suspendedVenues = await Venue.countDocuments({ status: 'suspended' })
-
-    // Reports by type
-    const reportsByType = await Report.aggregate([
-      { $group: { _id: '$type', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ])
-
-    const totalReportsCount = reportsByType.reduce((sum, type) => sum + type.count, 0)
-    const reportsByTypeData = reportsByType.map(type => ({
-      type: type._id,
-      count: type.count,
-      percentage: Math.round((type.count / totalReportsCount) * 100)
-    }))
-
-    // Reports by priority
-    const reportsByPriority = await Report.aggregate([
-      { $group: { _id: '$priority', count: { $sum: 1 } } },
-      { $sort: { count: -1 } }
-    ])
-
-    const reportsByPriorityData = reportsByPriority.map(priority => ({
-      priority: priority._id,
-      count: priority.count,
-      percentage: Math.round((priority.count / totalReportsCount) * 100)
-    }))
+    const totalReportsCount = reportsByType.reduce((sum: number, type: { count: number }) => sum + type.count, 0) || 1
 
     return NextResponse.json({
       totalReports,
@@ -50,14 +29,18 @@ export async function GET(request: NextRequest) {
       activeAlerts,
       bannedUsers,
       suspendedVenues,
-      reportsByType: reportsByTypeData,
-      reportsByPriority: reportsByPriorityData
+      reportsByType: reportsByType.map((type: { _id: string; count: number }) => ({
+        type: type._id,
+        count: type.count,
+        percentage: Math.round((type.count / totalReportsCount) * 100),
+      })),
+      reportsByPriority: reportsByPriority.map((priority: { _id: string; count: number }) => ({
+        priority: priority._id,
+        count: priority.count,
+        percentage: Math.round((priority.count / totalReportsCount) * 100),
+      })),
     })
-  } catch (error) {
-    console.error('Error fetching moderation stats:', error)
-    return NextResponse.json(
-      { error: 'Failed to fetch moderation statistics' },
-      { status: 500 }
-    )
+  } catch {
+    return jsonError("Failed to fetch moderation statistics", 500)
   }
 }
