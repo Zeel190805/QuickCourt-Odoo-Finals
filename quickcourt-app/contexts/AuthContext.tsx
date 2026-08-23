@@ -26,7 +26,6 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
   signup: (userData: { name: string; email: string; password: string; role?: string }) => Promise<{ ok: boolean; error?: string; email?: string }>
   logout: () => Promise<void>
-  verifyOTP: (otp: string, email: string) => Promise<{ ok: boolean; error?: string }>
   updateUser: (userData: User) => void
   refreshUser: () => Promise<void>
   isLoading: boolean
@@ -92,21 +91,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  const verifyOTP = async (otp: string, email: string) => {
-    try {
-      const response = await fetch("/api/auth/verify-otp", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, otp }),
-      })
-      const data = await response.json()
-      if (response.ok) return { ok: true }
-      return { ok: false, error: data.error || "Invalid OTP" }
-    } catch {
-      return { ok: false, error: "OTP verification failed" }
-    }
-  }
-
   const updateUser = (userData: User) => {
     setUser(userData)
   }
@@ -126,7 +110,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         signup,
         logout,
-        verifyOTP,
         updateUser,
         refreshUser,
         isLoading,

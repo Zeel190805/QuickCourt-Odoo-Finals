@@ -5,6 +5,9 @@ const nextConfig = {
   typescript: {
     ignoreBuildErrors: false,
   },
+  experimental: {
+    serverComponentsExternalPackages: ["mongoose", "mongodb", "nodemailer", "bcryptjs"],
+  },
 }
 
 export default nextConfig

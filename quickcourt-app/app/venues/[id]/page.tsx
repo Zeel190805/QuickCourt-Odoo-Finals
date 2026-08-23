@@ -269,10 +269,10 @@ export default function VenueDetailsPage() {
                       <div className="text-sm font-medium mb-2">Available Time Slots</div>
                       <div className="grid grid-cols-2 gap-2">
                         {slots.filter((s) => s.isAvailable).map((s) => (
-                          <Button key={s._id} variant="outline" onClick={() => router.push(`/booking/${venue!._id}/${selectedCourt}?date=${localDateString(selectedDate!)}&time=${s.time}`)}>
+                          <Button key={s._id || s.time} variant="outline" onClick={() => router.push(`/booking/${venue!._id}/${selectedCourt}?date=${localDateString(selectedDate!)}&time=${s.time}`)}>
                             <div className="text-left">
                               <div className="font-semibold">{s.time}</div>
-                              <div className="text-xs">₹{s.price}</div>
+                              <div className="text-xs">₹{s.price}{s.period ? ` · ${s.period}` : ""}</div>
                             </div>
                           </Button>
                         ))}

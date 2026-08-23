@@ -51,6 +51,45 @@ export function lastNMonths(n: number): Array<{ year: number; month: number; lab
   return out
 }
 
+export type SlotPeriod = "day" | "night"
+
+export const DAY_START_HOUR = 6
+export const DAY_END_HOUR = 18
+
+export function periodForHour(hour: number): SlotPeriod {
+  return hour >= DAY_START_HOUR && hour < DAY_END_HOUR ? "day" : "night"
+}
+
+export function periodForTime(time: string): SlotPeriod {
+  const hour = Number(time.split(":")[0])
+  return periodForHour(hour)
+}
+
+export function hourToTime(hour: number): string {
+  return `${String(((hour % 24) + 24) % 24).padStart(2, "0")}:00`
+}
+
+export function periodLabel(period: SlotPeriod): string {
+  return period === "day" ? "Day (6 AM – 6 PM)" : "Night (6 PM – 6 AM)"
+}
+
+export function generateDaySlots(
+  dayPrice: number,
+  nightPrice: number
+): Array<{ time: string; hour: number; period: SlotPeriod; price: number }> {
+  const out: Array<{ time: string; hour: number; period: SlotPeriod; price: number }> = []
+  for (let hour = 0; hour < 24; hour++) {
+    const period = periodForHour(hour)
+    out.push({
+      time: hourToTime(hour),
+      hour,
+      period,
+      price: period === "day" ? dayPrice : nightPrice,
+    })
+  }
+  return out
+}
+
 export function consecutiveHourTimes(startTime: string, durationHours: number): string[] {
   const [h, m] = startTime.split(":").map(Number)
   const times: string[] = []

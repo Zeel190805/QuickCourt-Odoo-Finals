@@ -1,7 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { dbConnect, User } from "@/lib/db"
 import bcrypt from "bcryptjs"
-import { issueOtp } from "@/lib/otp"
 
 const ALLOWED_ROLES = new Set(["user", "owner"])
 
@@ -28,26 +27,20 @@ export async function POST(request: NextRequest) {
     }
 
     const hashedPassword = await bcrypt.hash(password, 12)
-    await User.create({
+    const created = await User.create({
       name: String(name).trim(),
       email: emailNorm,
       password: hashedPassword,
       role: safeRole,
-      isVerified: false,
+      isVerified: true,
       accountStatus: "active",
     })
 
-    const otpResult = await issueOtp(emailNorm)
-    if (!otpResult.ok) {
-      return NextResponse.json(
-        { message: "Account created but OTP email failed. Please request a new OTP.", email: emailNorm },
-        { status: 201 }
-      )
-    }
-
     return NextResponse.json({
-      message: "User created successfully. Please verify your email.",
-      email: emailNorm,
+      message: "Account created successfully. You can now sign in.",
+      email: created.email,
+      id: String(created._id),
+      role: created.role,
     })
   } catch (error) {
     console.error(error)

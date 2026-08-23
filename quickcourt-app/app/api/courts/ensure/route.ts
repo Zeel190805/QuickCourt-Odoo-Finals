@@ -12,12 +12,17 @@ export async function POST(req: NextRequest) {
     const count: number = Math.max(1, Math.min(20, Number(body?.count ?? 1)))
     const sport: string = String(body?.sport ?? "General")
     const basePricePerHour: number = Number(body?.basePricePerHour ?? 0)
+    const dayPrice: number = Number(body?.dayPrice ?? basePricePerHour)
+    const nightPrice: number = Number(body?.nightPrice ?? basePricePerHour)
 
     if (!venueId || !isValidObjectId(venueId)) {
       return jsonError("venue is required", 400)
     }
     if (Number.isNaN(basePricePerHour) || basePricePerHour <= 0) {
       return jsonError("basePricePerHour must be greater than 0", 400)
+    }
+    if (Number.isNaN(dayPrice) || dayPrice <= 0 || Number.isNaN(nightPrice) || nightPrice <= 0) {
+      return jsonError("Day and night prices must be greater than 0", 400)
     }
 
     const access = await requireVenueAccess(venueId, auth.user)
@@ -35,6 +40,8 @@ export async function POST(req: NextRequest) {
       name: `Court ${idx + 1}`,
       sport,
       basePricePerHour,
+      dayPrice,
+      nightPrice,
     }))
 
     const created = await Court.insertMany(toCreate)

@@ -1,6 +1,16 @@
+import dns from "node:dns"
+import { URL } from "node:url"
 import mongoose, { Schema, model, models } from "mongoose"
 
+dns.setServers(["8.8.8.8", "1.1.1.1"])
+dns.setDefaultResultOrder("ipv4first")
+
 const MONGO_URL = process.env.MONGO_URL || ""
+const ATLAS_FALLBACK_HOSTS = [
+  "ac-n1pzoxc-shard-00-00.hhb3oip.mongodb.net:27017",
+  "ac-n1pzoxc-shard-00-01.hhb3oip.mongodb.net:27017",
+  "ac-n1pzoxc-shard-00-02.hhb3oip.mongodb.net:27017",
+]
 
 let cached = (global as typeof globalThis & {
   mongoose?: { conn: typeof mongoose | null; promise: Promise<typeof mongoose> | null }
@@ -12,17 +22,98 @@ if (!cached) {
   }).mongoose = { conn: null, promise: null }
 }
 
+function databaseNameFromUrl(url: string): string {
+  const named = process.env.MONGO_DB?.trim()
+  if (named) return named
+  try {
+    const parsed = new URL(url.replace(/^mongodb\+srv:\/\//i, "https://"))
+    const fromPath = parsed.pathname.replace(/^\//, "").trim()
+    if (fromPath) return fromPath
+  } catch {
+    return "quickcourt"
+  }
+  return "quickcourt"
+}
+
+function srvToStandard(url: string, hosts: string[], dbName: string): string {
+  const parsed = new URL(url.replace(/^mongodb\+srv:\/\//i, "https://"))
+  const auth = parsed.username
+    ? `${encodeURIComponent(decodeURIComponent(parsed.username))}:${encodeURIComponent(decodeURIComponent(parsed.password))}@`
+    : ""
+  const params = new URLSearchParams(parsed.search)
+  params.set("ssl", "true")
+  params.set("retryWrites", "true")
+  params.set("w", "majority")
+  params.set("authSource", params.get("authSource") || "admin")
+  params.set("appName", params.get("appName") || "quickcourt")
+  return `mongodb://${auth}${hosts.join(",")}/${dbName}?${params.toString()}`
+}
+
+async function resolveMongoUrl(url: string): Promise<{ uri: string; dbName: string }> {
+  const dbName = databaseNameFromUrl(url)
+  if (!url.startsWith("mongodb+srv://")) {
+    return { uri: url, dbName }
+  }
+  try {
+    const hostname = new URL(url.replace(/^mongodb\+srv:\/\//i, "https://")).hostname
+    const records = await dns.promises.resolveSrv(`_mongodb._tcp.${hostname}`)
+    const hosts = records
+      .sort((a, b) => a.priority - b.priority || b.weight - a.weight)
+      .map((r) => `${r.name}:${r.port}`)
+    if (hosts.length === 0) {
+      return { uri: srvToStandard(url, ATLAS_FALLBACK_HOSTS, dbName), dbName }
+    }
+    return { uri: srvToStandard(url, hosts, dbName), dbName }
+  } catch {
+    return { uri: srvToStandard(url, ATLAS_FALLBACK_HOSTS, dbName), dbName }
+  }
+}
+
+async function mergeFromTest(conn: typeof mongoose) {
+  const current = conn.connection.name
+  if (current !== "quickcourt") return
+  const source = conn.connection.getClient().db("test")
+  const target = conn.connection.db
+  if (!target) return
+  const names = ["users", "venues", "courts", "bookings", "timeslots", "reports", "alerts"]
+  for (const name of names) {
+    const docs = await source.collection(name).find({}).toArray()
+    for (const doc of docs) {
+      await target.collection(name).updateOne({ _id: doc._id }, { $setOnInsert: doc }, { upsert: true })
+    }
+  }
+}
+
 export async function dbConnect() {
   if (!MONGO_URL) {
     throw new Error("Please define the MONGO_URL environment variable")
+  }
+  const expectedDb = databaseNameFromUrl(MONGO_URL)
+  if (cached!.conn && cached!.conn.connection.name !== expectedDb) {
+    await cached!.conn.disconnect()
+    cached!.conn = null
+    cached!.promise = null
   }
   if (cached!.conn) {
     return cached!.conn
   }
   if (!cached!.promise) {
-    cached!.promise = mongoose
-      .connect(MONGO_URL, { bufferCommands: false })
-      .then((conn) => conn)
+    cached!.promise = resolveMongoUrl(MONGO_URL)
+      .then(({ uri, dbName }) =>
+        mongoose.connect(uri, {
+          bufferCommands: false,
+          family: 4,
+          dbName,
+          serverSelectionTimeoutMS: 15000,
+        })
+      )
+      .then(async (conn) => {
+        await mergeFromTest(conn)
+        if (process.env.NODE_ENV !== "production") {
+          console.log(`MongoDB connected to database "${conn.connection.name}"`)
+        }
+        return conn
+      })
       .catch((err) => {
         cached!.promise = null
         throw err
@@ -38,7 +129,7 @@ const UserSchema = new Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true },
     role: { type: String, enum: ["user", "owner", "admin"], default: "user" },
-    isVerified: { type: Boolean, default: false },
+    isVerified: { type: Boolean, default: true },
     accountStatus: { type: String, enum: ["active", "suspended", "banned"], default: "active" },
     lastLogin: { type: Date, default: null },
     phone: { type: String, default: "" },
@@ -86,6 +177,8 @@ const CourtSchema = new Schema(
     name: { type: String, required: true },
     sport: { type: String, required: true },
     basePricePerHour: { type: Number, required: true, min: 0 },
+    dayPrice: { type: Number, min: 0 },
+    nightPrice: { type: Number, min: 0 },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
@@ -176,17 +269,3 @@ const AlertSchema = new Schema(
 
 export const Alert = models.Alert || model("Alert", AlertSchema)
 
-const OTPSchema = new Schema(
-  {
-    email: { type: String, required: true, index: true, lowercase: true },
-    otp: { type: String, required: true },
-    expiresAt: { type: Date, required: true },
-    isUsed: { type: Boolean, default: false },
-    attempts: { type: Number, default: 0 },
-  },
-  { timestamps: true }
-)
-
-OTPSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
-
-export const OTP = models.OTP || model("OTP", OTPSchema)

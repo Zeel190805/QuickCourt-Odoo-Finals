@@ -17,6 +17,8 @@ interface TimeSlot {
   time: string
   isAvailable: boolean
   price: number
+  period?: "day" | "night"
+  hour?: number
 }
 
 interface Venue {
@@ -59,8 +61,29 @@ export default function BookingPage() {
   })
 
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
+  const [periodFilter, setPeriodFilter] = useState<"all" | "day" | "night">("all")
   const [isLoading, setIsLoading] = useState(true)
   const [isBooking, setIsBooking] = useState(false)
+
+  const visibleSlots = availableSlots.filter((s) => (periodFilter === "all" ? true : s.period === periodFilter))
+
+  const nextHour = (time: string) => `${String(Number(time.split(":")[0]) + 1).padStart(2, "0")}:00`
+
+  const coveredSlots = (() => {
+    if (!bookingData.selectedTimeSlot) return [] as TimeSlot[]
+    const out: TimeSlot[] = []
+    let t = bookingData.selectedTimeSlot.time
+    for (let i = 0; i < bookingData.duration; i++) {
+      const slot = availableSlots.find((s) => s.time === t)
+      if (!slot) break
+      out.push(slot)
+      t = nextHour(t)
+    }
+    return out
+  })()
+
+  const coverageValid =
+    coveredSlots.length === bookingData.duration && coveredSlots.every((s) => s.isAvailable)
 
   useEffect(() => {
     if (authLoading) return
@@ -150,7 +173,9 @@ export default function BookingPage() {
           _id: s._id,
           time: s.time, 
           price: s.price, 
-          isAvailable: s.isAvailable 
+          isAvailable: s.isAvailable,
+          period: s.period,
+          hour: s.hour,
         }))
         setAvailableSlots(slots)
         
@@ -172,15 +197,11 @@ export default function BookingPage() {
   }, [bookingData.selectedDate, bookingData.venue, bookingData.court, search, toast])
 
   useEffect(() => {
-    if (bookingData.selectedTimeSlot && bookingData.duration) {
-      setBookingData((prev) => ({
-        ...prev,
-        totalPrice: prev.selectedTimeSlot ? prev.selectedTimeSlot.price * prev.duration : 0,
-      }))
-    } else {
-      setBookingData((prev) => ({ ...prev, totalPrice: 0 }))
-    }
-  }, [bookingData.selectedTimeSlot, bookingData.duration])
+    const total = coveredSlots.reduce((sum, s) => sum + Number(s.price || 0), 0)
+    setBookingData((prev) => (prev.totalPrice === total ? prev : { ...prev, totalPrice: total }))
+    // coveredSlots is derived from selectedTimeSlot, duration and availableSlots
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingData.selectedTimeSlot, bookingData.duration, availableSlots])
 
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
@@ -288,7 +309,9 @@ export default function BookingPage() {
               _id: s._id,
               time: s.time, 
               price: s.price, 
-              isAvailable: s.isAvailable 
+              isAvailable: s.isAvailable,
+              period: s.period,
+              hour: s.hour,
             }))
             setAvailableSlots(slots)
             setBookingData((prev) => ({ ...prev, selectedTimeSlot: null }))
@@ -418,35 +441,56 @@ export default function BookingPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Select Time Slot</CardTitle>
-                  <CardDescription>Available slots for {bookingData.selectedDate.toDateString()}</CardDescription>
+                  <CardDescription>
+                    Pick any open hour for {bookingData.selectedDate.toDateString()}. Booked hours are shown greyed out.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-4 gap-3">
-                    {availableSlots.map((slot) => (
+                  <div className="flex gap-2 mb-4">
+                    {(["all", "day", "night"] as const).map((p) => (
                       <Button
-                        key={slot._id || slot.time}
-                        variant={
-                          bookingData.selectedTimeSlot?.time === slot.time
-                            ? "default"
-                            : slot.isAvailable
-                              ? "outline"
-                              : "secondary"
-                        }
-                        disabled={!slot.isAvailable}
-                        onClick={() => handleTimeSlotSelect(slot)}
-                        className="h-12"
+                        key={p}
+                        size="sm"
+                        variant={periodFilter === p ? "default" : "outline"}
+                        onClick={() => setPeriodFilter(p)}
                       >
-                        <div className="text-center">
-                          <div className="font-semibold">{slot.time}</div>
-                          {slot.isAvailable ? (
-                            <div className="text-xs">₹{slot.price}</div>
-                          ) : (
-                            <div className="text-xs">Booked</div>
-                          )}
-                        </div>
+                        {p === "all" ? "All" : p === "day" ? "Day (6 AM–6 PM)" : "Night (6 PM–6 AM)"}
                       </Button>
                     ))}
                   </div>
+                  {visibleSlots.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">No slots available for this selection.</p>
+                  ) : (
+                    <div className="grid grid-cols-4 gap-3">
+                      {visibleSlots.map((slot) => (
+                        <Button
+                          key={slot._id || slot.time}
+                          variant={
+                            bookingData.selectedTimeSlot?.time === slot.time
+                              ? "default"
+                              : slot.isAvailable
+                                ? "outline"
+                                : "secondary"
+                          }
+                          disabled={!slot.isAvailable}
+                          onClick={() => handleTimeSlotSelect(slot)}
+                          className="h-14 flex-col"
+                        >
+                          <div className="text-center">
+                            <div className="font-semibold">{slot.time}</div>
+                            {slot.isAvailable ? (
+                              <>
+                                <div className="text-xs">₹{slot.price}</div>
+                                <div className="text-[10px] uppercase opacity-70">{slot.period}</div>
+                              </>
+                            ) : (
+                              <div className="text-xs">Booked</div>
+                            )}
+                          </div>
+                        </Button>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             )}
@@ -456,25 +500,40 @@ export default function BookingPage() {
               <Card>
                 <CardHeader>
                   <CardTitle>Select Duration</CardTitle>
-                  <CardDescription>How long would you like to play?</CardDescription>
+                  <CardDescription>
+                    Book a custom length starting {bookingData.selectedTimeSlot.time}. Options that overlap a booked hour are disabled.
+                  </CardDescription>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-4 gap-3">
-                    {[1, 2, 3, 4].map((hours) => (
-                      <Button
-                        key={hours}
-                        variant={bookingData.duration === hours ? "default" : "outline"}
-                        onClick={() => handleDurationChange(hours)}
-                        className="h-12"
-                      >
-                        <div className="text-center">
-                          <div className="font-semibold">
-                            {hours} hour{hours > 1 ? "s" : ""}
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((hours) => {
+                      const start = bookingData.selectedTimeSlot!.time
+                      let ok = true
+                      let sum = 0
+                      let t = start
+                      for (let i = 0; i < hours; i++) {
+                        const s = availableSlots.find((x) => x.time === t)
+                        if (!s || !s.isAvailable) { ok = false; break }
+                        sum += Number(s.price || 0)
+                        t = nextHour(t)
+                      }
+                      return (
+                        <Button
+                          key={hours}
+                          variant={bookingData.duration === hours ? "default" : "outline"}
+                          disabled={!ok}
+                          onClick={() => handleDurationChange(hours)}
+                          className="h-12"
+                        >
+                          <div className="text-center">
+                            <div className="font-semibold">
+                              {hours} hour{hours > 1 ? "s" : ""}
+                            </div>
+                            <div className="text-xs">{ok ? `₹${sum}` : "N/A"}</div>
                           </div>
-                          <div className="text-xs">₹{(bookingData.selectedTimeSlot?.price || 0) * hours}</div>
-                        </div>
-                      </Button>
-                    ))}
+                        </Button>
+                      )
+                    })}
                   </div>
                 </CardContent>
               </Card>
@@ -536,7 +595,7 @@ export default function BookingPage() {
                       className="w-full"
                       size="lg"
                       onClick={handleBooking}
-                      disabled={isBooking || !bookingData.selectedDate || !bookingData.selectedTimeSlot}
+                      disabled={isBooking || !bookingData.selectedDate || !bookingData.selectedTimeSlot || !coverageValid}
                     >
                       {isBooking ? (
                         <>

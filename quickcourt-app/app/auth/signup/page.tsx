@@ -1,7 +1,6 @@
 "use client"
 
 import type React from "react"
-
 import { useState } from "react"
 import { useAuth } from "@/contexts/AuthContext"
 import { useRouter } from "next/navigation"
@@ -22,9 +21,7 @@ export default function SignupPage() {
     role: "user",
   })
   const [isLoading, setIsLoading] = useState(false)
-  const [showOTP, setShowOTP] = useState(false)
-  const [otp, setOtp] = useState("")
-  const { signup, verifyOTP } = useAuth()
+  const { signup } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
 
@@ -40,6 +37,15 @@ export default function SignupPage() {
       return
     }
 
+    if (formData.password.length < 8) {
+      toast({
+        title: "Error",
+        description: "Password must be at least 8 characters",
+        variant: "destructive",
+      })
+      return
+    }
+
     setIsLoading(true)
 
     try {
@@ -50,11 +56,11 @@ export default function SignupPage() {
         role: formData.role,
       })
       if (result.ok) {
-        setShowOTP(true)
         toast({
           title: "Account created",
-          description: "Please verify your email with the OTP sent to you.",
+          description: "You can now sign in with your password.",
         })
+        router.push("/auth/login")
       } else {
         toast({
           title: "Signup failed",
@@ -62,7 +68,7 @@ export default function SignupPage() {
           variant: "destructive",
         })
       }
-    } catch (error) {
+    } catch {
       toast({
         title: "Error",
         description: "Something went wrong. Please try again.",
@@ -71,68 +77,6 @@ export default function SignupPage() {
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const handleOTPVerification = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setIsLoading(true)
-
-    try {
-      const result = await verifyOTP(otp, formData.email)
-      if (result.ok) {
-        toast({
-          title: "Email verified",
-          description: "Your account has been verified successfully!",
-        })
-        router.push("/auth/login")
-      } else {
-        toast({
-          title: "Invalid OTP",
-          description: result.error || "Please check your OTP and try again",
-          variant: "destructive",
-        })
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Something went wrong. Please try again.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsLoading(false)
-    }
-  }
-
-  if (showOTP) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl font-bold text-indigo-600">Verify Email</CardTitle>
-            <CardDescription>Enter the OTP sent to your email</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleOTPVerification} className="space-y-4">
-              <div>
-                <Label htmlFor="otp">OTP Code</Label>
-                <Input
-                  id="otp"
-                  type="text"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
-                  required
-                  placeholder="Enter 6-digit OTP"
-                  maxLength={6}
-                />
-              </div>
-              <Button type="submit" className="w-full" disabled={isLoading}>
-                {isLoading ? "Verifying..." : "Verify Email"}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
-      </div>
-    )
   }
 
   return (
@@ -186,7 +130,8 @@ export default function SignupPage() {
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
-                placeholder="Enter your password"
+                minLength={8}
+                placeholder="At least 8 characters"
               />
             </div>
             <div>
@@ -197,6 +142,7 @@ export default function SignupPage() {
                 value={formData.confirmPassword}
                 onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
                 required
+                minLength={8}
                 placeholder="Confirm your password"
               />
             </div>
@@ -204,7 +150,6 @@ export default function SignupPage() {
               {isLoading ? "Creating Account..." : "Create Account"}
             </Button>
           </form>
-
           <div className="mt-6 text-center">
             <p className="text-sm text-gray-600">
               Already have an account?{" "}
