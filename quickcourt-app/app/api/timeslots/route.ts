@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-import { dbConnect, TimeSlot } from "@/lib/db"
+import { dbConnect, Court, TimeSlot } from "@/lib/db"
 import { isValidObjectId, jsonError, requireAuth, requireVenueAccess } from "@/lib/api"
-import { isValidTime, localDateString, localTimeString, parseLocalDate } from "@/lib/dates"
+import {
+  generateDaySlots,
+  isValidTime,
+  localDateString,
+  localTimeString,
+  parseLocalDate,
+  type SlotPeriod,
+} from "@/lib/dates"
 
 export const dynamic = "force-dynamic"
 
@@ -12,27 +19,51 @@ export async function GET(req: NextRequest) {
     const venue = searchParams.get("venue")
     const court = searchParams.get("court")
     const date = searchParams.get("date")
+    const period = searchParams.get("period") as SlotPeriod | null
 
+    if (venue && !isValidObjectId(venue)) return jsonError("Invalid venue id", 400)
+    if (court && !isValidObjectId(court)) return jsonError("Invalid court id", 400)
+
+    // Court + date => generate the full day/night grid with live availability.
+    if (court && date) {
+      if (!parseLocalDate(date)) return jsonError("Invalid date", 400)
+      const courtDoc = await Court.findById(court)
+      if (!courtDoc) return jsonError("Court not found", 404)
+
+      const dayPrice = Number(courtDoc.dayPrice ?? courtDoc.basePricePerHour ?? 0)
+      const nightPrice = Number(courtDoc.nightPrice ?? courtDoc.basePricePerHour ?? 0)
+
+      const todayStr = localDateString()
+      if (date < todayStr) return NextResponse.json([])
+      const nowTime = date === todayStr ? localTimeString() : null
+
+      const taken = await TimeSlot.find({ court, date, isAvailable: false }).select("time")
+      const takenTimes = new Set(taken.map((t) => t.time))
+
+      const slots = generateDaySlots(dayPrice, nightPrice)
+        .filter((s) => (period ? s.period === period : true))
+        .filter((s) => (nowTime ? s.time >= nowTime : true))
+        .map((s) => ({
+          court,
+          venue: venue || String(courtDoc.venue),
+          date,
+          time: s.time,
+          hour: s.hour,
+          period: s.period,
+          price: s.price,
+          isAvailable: !takenTimes.has(s.time),
+        }))
+
+      return NextResponse.json(slots)
+    }
+
+    // Fallback: raw stored slots (used by owner listings without a specific date/court).
     const query: Record<string, unknown> = {}
-    if (venue) {
-      if (!isValidObjectId(venue)) return jsonError("Invalid venue id", 400)
-      query.venue = venue
-    }
-    if (court) {
-      if (!isValidObjectId(court)) return jsonError("Invalid court id", 400)
-      query.court = court
-    }
+    if (venue) query.venue = venue
+    if (court) query.court = court
     if (date) {
       if (!parseLocalDate(date)) return jsonError("Invalid date", 400)
       query.date = date
-      const todayStr = localDateString()
-      const nowTime = localTimeString()
-      if (date < todayStr) {
-        return NextResponse.json([])
-      }
-      if (date === todayStr) {
-        query.time = { $gte: nowTime }
-      }
     }
 
     const slots = await TimeSlot.find(query).sort({ time: 1 })

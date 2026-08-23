@@ -58,26 +58,26 @@ function VenueForm({ initial, onSubmit, loading }: any) {
           </FormItem>
         )} />
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <FormField name="priceRange.min" control={form.control} render={({ field }) => (
+          <FormField name="dayPrice" control={form.control} render={({ field }) => (
             <FormItem>
-              <FormLabel>Min Price</FormLabel>
+              <FormLabel>Day Price / hour (6 AM – 6 PM)</FormLabel>
               <FormControl>
-                <Input type="number" step="0.01" {...field} required onChange={(e) => field.onChange(e.target.value)} />
+                <Input type="number" min={1} step="0.01" placeholder="e.g. 500" {...field} required onChange={(e) => field.onChange(e.target.value)} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )} />
-          <FormField name="priceRange.max" control={form.control} render={({ field }) => (
+          <FormField name="nightPrice" control={form.control} render={({ field }) => (
             <FormItem>
-              <FormLabel>Max Price</FormLabel>
+              <FormLabel>Night Price / hour (6 PM – 6 AM)</FormLabel>
               <FormControl>
-                <Input type="number" step="0.01" {...field} required onChange={(e) => field.onChange(e.target.value)} />
+                <Input type="number" min={1} step="0.01" placeholder="e.g. 800" {...field} required onChange={(e) => field.onChange(e.target.value)} />
               </FormControl>
               <FormMessage />
             </FormItem>
           )} />
         </div>
-        <p className="text-xs text-muted-foreground">New venues are created as Pending. They become visible to users after admin approval.</p>
+        <p className="text-xs text-muted-foreground">Day slots run 6 AM–6 PM and night slots 6 PM–6 AM. Players book any open hour at the matching rate. New venues are created as Pending and become visible to users after admin approval.</p>
         <Button type="submit" disabled={loading}>{loading ? "Saving..." : "Save"}</Button>
       </form>
     </Form>
@@ -125,12 +125,16 @@ export default function FacilitiesPage() {
     const method = editVenue ? "PUT" : "POST";
     const url = editVenue ? `/api/venues/${editVenue._id}` : "/api/venues";
 
-    // Coerce nested priceRange values to numbers and build sports array
+    // Day/night pricing drives court rates; venue priceRange is derived for display.
+    const dayPrice = Number(data?.dayPrice ?? 0);
+    const nightPrice = Number(data?.nightPrice ?? 0);
     const normalized: any = {
       ...data,
+      dayPrice,
+      nightPrice,
       priceRange: {
-        min: Number(data?.priceRange?.min ?? 0),
-        max: Number(data?.priceRange?.max ?? 0),
+        min: Math.min(dayPrice, nightPrice),
+        max: Math.max(dayPrice, nightPrice),
       },
       sports: parseSports(data?.sportsText),
       numCourts: Number(data?.numCourts ?? 1),
@@ -169,7 +173,9 @@ export default function FacilitiesPage() {
           venue: venueId,
           count: normalized.numCourts,
           sport,
-          basePricePerHour: normalized.priceRange.min || 0,
+          basePricePerHour: normalized.dayPrice || normalized.nightPrice || 0,
+          dayPrice: normalized.dayPrice,
+          nightPrice: normalized.nightPrice,
         }),
       })
     }
@@ -237,7 +243,7 @@ export default function FacilitiesPage() {
           <DialogContent>
             <h2 className="text-xl font-semibold mb-4">{editVenue ? "Edit Venue" : "Add Venue"}</h2>
             <VenueForm
-              initial={editVenue ? { ...editVenue, sportsText: (editVenue?.sports || []).join(", ") } : { name: "", description: "", location: "", sportsText: "", numCourts: 1, priceRange: { min: 0, max: 0 } }}
+              initial={editVenue ? { ...editVenue, sportsText: (editVenue?.sports || []).join(", "), dayPrice: editVenue?.dayPrice ?? editVenue?.priceRange?.min ?? 0, nightPrice: editVenue?.nightPrice ?? editVenue?.priceRange?.max ?? 0 } : { name: "", description: "", location: "", sportsText: "", numCourts: 1, dayPrice: "", nightPrice: "" }}
               onSubmit={handleSubmit}
               loading={loading}
             />

@@ -33,6 +33,16 @@ async function updateCourt(req: NextRequest, id: string) {
     if (Number.isNaN(price) || price <= 0) return jsonError("Invalid price", 400)
     updates.basePricePerHour = price
   }
+  if (data.dayPrice !== undefined) {
+    const price = Number(data.dayPrice)
+    if (Number.isNaN(price) || price <= 0) return jsonError("Invalid day price", 400)
+    updates.dayPrice = price
+  }
+  if (data.nightPrice !== undefined) {
+    const price = Number(data.nightPrice)
+    if (Number.isNaN(price) || price <= 0) return jsonError("Invalid night price", 400)
+    updates.nightPrice = price
+  }
   if (typeof data.isActive === "boolean") updates.isActive = data.isActive
   const updated = await Court.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true })
   return NextResponse.json(updated)

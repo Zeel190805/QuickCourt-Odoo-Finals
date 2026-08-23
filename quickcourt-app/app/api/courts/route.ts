@@ -49,11 +49,18 @@ export async function POST(req: NextRequest) {
     if (!name || !sport || Number.isNaN(basePricePerHour) || basePricePerHour <= 0) {
       return jsonError("Invalid court data", 400)
     }
+    const dayPrice = Number(data.dayPrice ?? basePricePerHour)
+    const nightPrice = Number(data.nightPrice ?? basePricePerHour)
+    if (Number.isNaN(dayPrice) || dayPrice <= 0 || Number.isNaN(nightPrice) || nightPrice <= 0) {
+      return jsonError("Day and night prices must be greater than 0", 400)
+    }
     const created = await Court.create({
       venue: data.venue,
       name,
       sport,
       basePricePerHour,
+      dayPrice,
+      nightPrice,
       isActive: true,
     })
     await syncCourtCount(data.venue)

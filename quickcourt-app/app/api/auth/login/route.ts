@@ -26,10 +26,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Account is not active" }, { status: 403 })
     }
 
-    if (!user.isVerified) {
-      return NextResponse.json({ error: "Please verify your email before logging in" }, { status: 403 })
-    }
-
     user.lastLogin = new Date()
     await user.save()
 

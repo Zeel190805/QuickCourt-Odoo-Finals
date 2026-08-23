@@ -3,7 +3,7 @@ import { emailService, type BookingEmailData } from "@/lib/email"
 import { dbConnect, Booking, TimeSlot, User, Venue, Court } from "@/lib/db"
 import { isValidObjectId, jsonError, requireAuth } from "@/lib/api"
 import { appUrl } from "@/lib/utils"
-import { bookingDateTime, consecutiveHourTimes, formatBookingDate, isValidTime, parseLocalDate } from "@/lib/dates"
+import { bookingDateTime, consecutiveHourTimes, formatBookingDate, isValidTime, parseLocalDate, periodForTime } from "@/lib/dates"
 
 export async function POST(request: NextRequest) {
   try {
@@ -52,18 +52,39 @@ export async function POST(request: NextRequest) {
       return jsonError("Duration extends past midnight and is not supported", 400)
     }
 
+    const dayPrice = Number(court.dayPrice ?? court.basePricePerHour ?? 0)
+    const nightPrice = Number(court.nightPrice ?? court.basePricePerHour ?? 0)
+    const priceForTime = (t: string) => (periodForTime(t) === "day" ? dayPrice : nightPrice)
+
     const claimed: Array<{ _id: unknown; price: number; time: string }> = []
     try {
       for (const slotTime of times) {
-        const slot = await TimeSlot.findOneAndUpdate(
+        const price = priceForTime(slotTime)
+        // Claim an existing open slot, or create the claim if none exists yet.
+        const existing = await TimeSlot.findOneAndUpdate(
           { court: courtId, date, time: slotTime, isAvailable: true },
-          { isAvailable: false },
+          { $set: { isAvailable: false, price, venue: venueId } },
           { new: true }
         )
-        if (!slot) {
-          throw new Error("UNAVAILABLE")
+        if (existing) {
+          claimed.push({ _id: existing._id, price, time: slotTime })
+          continue
         }
-        claimed.push({ _id: slot._id, price: slot.price, time: slotTime })
+        // No open slot: either it's already taken or was never created.
+        try {
+          const created = await TimeSlot.create({
+            court: courtId,
+            venue: venueId,
+            date,
+            time: slotTime,
+            price,
+            isAvailable: false,
+          })
+          claimed.push({ _id: created._id, price, time: slotTime })
+        } catch (e: unknown) {
+          if ((e as { code?: number }).code === 11000) throw new Error("UNAVAILABLE")
+          throw e
+        }
       }
     } catch (err) {
       await TimeSlot.updateMany({ _id: { $in: claimed.map((c) => c._id) } }, { $set: { isAvailable: true } })
