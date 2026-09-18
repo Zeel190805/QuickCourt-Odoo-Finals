@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { MapPin, Star, Clock, Users, Wifi, Car, Coffee, Dumbbell, ArrowLeft } from "lucide-react"
-import { localDateString } from "@/lib/dates"
+import { localDateString, formatSlotRange } from "@/lib/dates"
 import Link from "next/link"
 
 interface VenueApi {
@@ -112,7 +112,7 @@ export default function VenueDetailsPage() {
                 Back
               </Button>
               <Link href="/">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
+                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">CourtX</h1>
               </Link>
             </div>
             <div className="flex items-center space-x-4">
@@ -271,7 +271,7 @@ export default function VenueDetailsPage() {
                         {slots.filter((s) => s.isAvailable).map((s) => (
                           <Button key={s._id || s.time} variant="outline" onClick={() => router.push(`/booking/${venue!._id}/${selectedCourt}?date=${localDateString(selectedDate!)}&time=${s.time}`)}>
                             <div className="text-left">
-                              <div className="font-semibold">{s.time}</div>
+                              <div className="font-semibold text-xs">{formatSlotRange(s.time)}</div>
                               <div className="text-xs">₹{s.price}{s.period ? ` · ${s.period}` : ""}</div>
                             </div>
                           </Button>

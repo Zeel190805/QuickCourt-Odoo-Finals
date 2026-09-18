@@ -233,7 +233,7 @@ export default function FacilitiesPage() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto py-8">
+    <div className="w-full max-w-[1440px] mx-auto px-4 sm:px-6 lg:px-8 xl:px-10 py-8">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-2xl font-bold">Manage Facilities</h1>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>

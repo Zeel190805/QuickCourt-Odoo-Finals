@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from "next/server"
-import { dbConnect, Court, TimeSlot } from "@/lib/db"
+import { dbConnect, Booking, Court, TimeSlot, Venue } from "@/lib/db"
+import { resolveCourtRates } from "@/lib/pricing"
 import { isValidObjectId, jsonError, requireAuth, requireVenueAccess } from "@/lib/api"
 import {
   generateDaySlots,
+  isValidSlotTime,
   isValidTime,
   localDateString,
   localTimeString,
@@ -29,30 +31,42 @@ export async function GET(req: NextRequest) {
       if (!parseLocalDate(date)) return jsonError("Invalid date", 400)
       const courtDoc = await Court.findById(court)
       if (!courtDoc) return jsonError("Court not found", 404)
-
-      const dayPrice = Number(courtDoc.dayPrice ?? courtDoc.basePricePerHour ?? 0)
-      const nightPrice = Number(courtDoc.nightPrice ?? courtDoc.basePricePerHour ?? 0)
+      const venueDoc = await Venue.findById(courtDoc.venue)
+      const { dayPrice, nightPrice } = resolveCourtRates(courtDoc, venueDoc)
 
       const todayStr = localDateString()
       if (date < todayStr) return NextResponse.json([])
       const nowTime = date === todayStr ? localTimeString() : null
 
-      const taken = await TimeSlot.find({ court, date, isAvailable: false }).select("time")
-      const takenTimes = new Set(taken.map((t) => t.time))
+      const [stored, bookings] = await Promise.all([
+        TimeSlot.find({ court, date }),
+        Booking.find({ court, date, status: "confirmed" }).select("time"),
+      ])
+      const byTime = new Map(stored.map((s) => [s.time, s]))
+      const bookedTimes = new Set(bookings.map((b) => b.time))
 
       const slots = generateDaySlots(dayPrice, nightPrice)
         .filter((s) => (period ? s.period === period : true))
         .filter((s) => (nowTime ? s.time >= nowTime : true))
-        .map((s) => ({
-          court,
-          venue: venue || String(courtDoc.venue),
-          date,
-          time: s.time,
-          hour: s.hour,
-          period: s.period,
-          price: s.price,
-          isAvailable: !takenTimes.has(s.time),
-        }))
+        .map((s) => {
+          const rec = byTime.get(s.time)
+          const isBooked = bookedTimes.has(s.time)
+          return {
+            _id: rec?._id ? String(rec._id) : undefined,
+            court,
+            venue: venue || String(courtDoc.venue),
+            date,
+            time: s.time,
+            hour: s.hour,
+            period: s.period,
+            price: s.price,
+            dayRate: dayPrice,
+            nightRate: nightPrice,
+            isAvailable: isBooked ? false : rec ? rec.isAvailable : true,
+            isBooked,
+            hasOverride: Boolean(rec) && !isBooked,
+          }
+        })
 
       return NextResponse.json(slots)
     }
@@ -84,12 +98,19 @@ export async function POST(req: NextRequest) {
     }
     const access = await requireVenueAccess(data.venue, auth.user)
     if (!access.ok) return access.response
-    if (!parseLocalDate(data.date) || !isValidTime(data.time)) {
-      return jsonError("Invalid date or time", 400)
+    if (!parseLocalDate(data.date) || !isValidSlotTime(data.time)) {
+      return jsonError("Invalid date or slot time. Use 3-hour blocks: 00:00, 03:00, 06:00 … 21:00", 400)
     }
     const price = Number(data.price)
     if (Number.isNaN(price) || price <= 0) {
       return jsonError("Price must be greater than 0", 400)
+    }
+    const existing = await TimeSlot.findOne({ court: data.court, date: data.date, time: data.time })
+    if (existing) {
+      existing.price = price
+      existing.isAvailable = data.isAvailable !== false
+      await existing.save()
+      return NextResponse.json(existing)
     }
     const created = await TimeSlot.create({
       venue: data.venue,
@@ -97,12 +118,10 @@ export async function POST(req: NextRequest) {
       date: data.date,
       time: data.time,
       price,
-      isAvailable: true,
+      isAvailable: data.isAvailable !== false,
     })
     return NextResponse.json(created, { status: 201 })
-  } catch (e: unknown) {
-    const code = (e as { code?: number }).code
-    const message = code === 11000 ? "Duplicate slot for this court/date/time" : "Failed to create timeslot"
-    return jsonError(message, 400)
+  } catch {
+    return jsonError("Failed to create timeslot", 400)
   }
 }

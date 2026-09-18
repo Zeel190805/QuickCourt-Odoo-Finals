@@ -8,20 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, DollarSign, Users, Building, Clock, MapPin } from "lucide-react"
 import Link from "next/link"
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-} from "recharts"
+import { AnimatedLineChart, AnimatedBarChart, AnimatedDonut } from "@/components/dashboard-charts"
+import { Stagger, StaggerItem } from "@/components/motion"
+import { AppContainer } from "@/components/app-container"
+import { Logo } from "@/components/logo"
 
 interface DashboardStats {
   totalBookings: number
@@ -122,13 +112,11 @@ export default function OwnerDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
-              </Link>
+      <header className="bg-white shadow-sm border-b">
+        <AppContainer>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center gap-3">
+              <Link href="/"><Logo size="sm" /></Link>
               <Badge variant="secondary">Facility Owner</Badge>
             </div>
             <div className="flex items-center space-x-4">
@@ -138,10 +126,11 @@ export default function OwnerDashboard() {
               </Link>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-6">
+        <AppContainer>
         {/* Page Header */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Dashboard</h2>
@@ -149,7 +138,7 @@ export default function OwnerDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Link href="/owner/facilities">
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-6 text-center">
@@ -185,54 +174,62 @@ export default function OwnerDashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalBookings}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.bookingGrowth ? `${stats.bookingGrowth} from last month` : 'No previous data'}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Courts</CardTitle>
-              <Building className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.activeCourts}</div>
-              <p className="text-xs text-muted-foreground">All courts operational</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Earnings</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                              <div className="text-2xl font-bold">₹{stats.monthlyEarnings}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.earningsGrowth ? `${stats.earningsGrowth} from last month` : 'No previous data'}
-              </p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCustomers}</div>
-              <p className="text-xs text-muted-foreground">
-                {stats.newCustomersThisMonth ? `+${stats.newCustomersThisMonth} new this month` : 'No new customers'}
-              </p>
-            </CardContent>
-          </Card>
-        </div>
+        <Stagger className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+          <StaggerItem>
+            <Card className="border-l-4 border-l-indigo-500 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+                <Calendar className="h-4 w-4 text-indigo-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalBookings}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.bookingGrowth ? `${stats.bookingGrowth} from last month` : 'No previous data'}
+                </p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-emerald-500 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Active Courts</CardTitle>
+                <Building className="h-4 w-4 text-emerald-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.activeCourts}</div>
+                <p className="text-xs text-muted-foreground">All courts operational</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-amber-500 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Monthly Earnings</CardTitle>
+                <DollarSign className="h-4 w-4 text-amber-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">₹{stats.monthlyEarnings}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.earningsGrowth ? `${stats.earningsGrowth} from last month` : 'No previous data'}
+                </p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-pink-500 hover:shadow-lg transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Total Customers</CardTitle>
+                <Users className="h-4 w-4 text-pink-500" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats.totalCustomers}</div>
+                <p className="text-xs text-muted-foreground">
+                  {stats.newCustomersThisMonth ? `+${stats.newCustomersThisMonth} new this month` : 'No new customers'}
+                </p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+        </Stagger>
 
         {/* Charts and Analytics */}
         <div className="grid lg:grid-cols-2 gap-8 mb-8">
@@ -243,22 +240,15 @@ export default function OwnerDashboard() {
               <CardDescription>Monthly bookings and earnings over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                {bookingTrends.length > 0 ? (
-                  <LineChart data={bookingTrends}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="month" />
-                    <YAxis />
-                    <Tooltip />
-                    <Line type="monotone" dataKey="bookings" stroke="#8884d8" strokeWidth={2} />
-                    <Line type="monotone" dataKey="earnings" stroke="#82ca9d" strokeWidth={2} />
-                  </LineChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500">No booking data available</p>
-                  </div>
-                )}
-              </ResponsiveContainer>
+              <AnimatedLineChart
+                data={bookingTrends}
+                xKey="month"
+                series={[
+                  { key: "bookings", label: "Bookings", color: "#6366f1" },
+                  { key: "earnings", label: "Earnings", color: "#22c55e" },
+                ]}
+                emptyLabel="No booking data available"
+              />
             </CardContent>
           </Card>
 
@@ -269,31 +259,7 @@ export default function OwnerDashboard() {
               <CardDescription>Breakdown of bookings by sport type</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                {sportDistribution.length > 0 ? (
-                  <PieChart>
-                    <Pie
-                      data={sportDistribution}
-                      cx="50%"
-                      cy="50%"
-                      labelLine={false}
-                      label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                      outerRadius={80}
-                      fill="#8884d8"
-                      dataKey="value"
-                    >
-                      {sportDistribution.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.color} />
-                      ))}
-                    </Pie>
-                    <Tooltip />
-                  </PieChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500">No sport distribution data available</p>
-                  </div>
-                )}
-              </ResponsiveContainer>
+              <AnimatedDonut data={sportDistribution} emptyLabel="No sport distribution data available" />
             </CardContent>
           </Card>
 
@@ -304,21 +270,12 @@ export default function OwnerDashboard() {
               <CardDescription>Booking frequency throughout the day</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                {peakHours.length > 0 ? (
-                  <BarChart data={peakHours}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="hour" />
-                    <YAxis />
-                    <Tooltip />
-                    <Bar dataKey="bookings" fill="#8884d8" />
-                  </BarChart>
-                ) : (
-                  <div className="flex items-center justify-center h-full">
-                    <p className="text-gray-500">No peak hours data available</p>
-                  </div>
-                )}
-              </ResponsiveContainer>
+              <AnimatedBarChart
+                data={peakHours}
+                xKey="hour"
+                bars={[{ key: "bookings", label: "Bookings", color: "#6366f1" }]}
+                emptyLabel="No peak hours data available"
+              />
             </CardContent>
           </Card>
         </div>
@@ -371,6 +328,7 @@ export default function OwnerDashboard() {
             </div>
           </CardContent>
         </Card>
+        </AppContainer>
       </main>
     </div>
   )

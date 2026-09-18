@@ -103,7 +103,7 @@ export default function VenuesPage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <Link href="/">
-              <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
+              <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">CourtX</h1>
             </Link>
             <div className="flex items-center space-x-4">
               <Link href="/bookings">

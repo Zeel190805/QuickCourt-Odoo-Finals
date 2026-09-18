@@ -14,6 +14,8 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Users, Search, Filter, MoreHorizontal, UserCheck, UserX, Shield, Mail, Calendar, Eye, Edit, Trash2 } from "lucide-react"
 import Link from "next/link"
 import { useToast } from "@/hooks/use-toast"
+import { AppContainer } from "@/components/app-container"
+import { Logo } from "@/components/logo"
 
 interface User {
   _id: string
@@ -247,13 +249,11 @@ export default function UserManagement() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/admin/dashboard">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
-              </Link>
+      <header className="bg-white shadow-sm border-b">
+        <AppContainer>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center gap-3">
+              <Link href="/admin/dashboard"><Logo size="sm" /></Link>
               <Badge variant="destructive">Admin</Badge>
             </div>
             <div className="flex items-center space-x-4">
@@ -263,10 +263,11 @@ export default function UserManagement() {
               </Link>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-6">
+        <AppContainer>
         {/* Page Header */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">User Management</h2>
@@ -274,7 +275,7 @@ export default function UserManagement() {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
@@ -385,16 +386,13 @@ export default function UserManagement() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={
-                        user.role === 'admin' ? 'destructive' :
-                        user.role === 'owner' ? 'default' : 'secondary'
-                      }>
+                      <Badge variant={user.role === "admin" ? "destructive" : user.role === "owner" ? "default" : "secondary"} className="capitalize">
                         {user.role}
                       </Badge>
                     </TableCell>
                     <TableCell>
-                      <Badge variant={user.isVerified ? 'default' : 'outline'}>
-                        {user.isVerified ? 'Verified' : 'Unverified'}
+                      <Badge variant={user.isVerified ? "default" : "outline"} className="whitespace-nowrap">
+                        {user.isVerified ? "Verified" : "Unverified"}
                       </Badge>
                     </TableCell>
                     <TableCell>
@@ -407,26 +405,18 @@ export default function UserManagement() {
                         {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div className="flex items-center space-x-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => openUpdateDialog(user)}
-                        >
-                          <Edit className="h-4 w-4" />
+                    <TableCell className="whitespace-nowrap">
+                      <div className="inline-flex items-center gap-1.5">
+                        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => openUpdateDialog(user)} title="Edit">
+                          <Edit className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleVerifyUser(user._id, !user.isVerified)}
-                        >
-                          {user.isVerified ? <UserX className="h-4 w-4" /> : <UserCheck className="h-4 w-4" />}
+                        <Button variant="outline" size="icon" className="h-8 w-8 shrink-0" onClick={() => handleVerifyUser(user._id, !user.isVerified)} title={user.isVerified ? "Unverify" : "Verify"}>
+                          {user.isVerified ? <UserX className="h-3.5 w-3.5" /> : <UserCheck className="h-3.5 w-3.5" />}
                         </Button>
                         <AlertDialog>
                           <AlertDialogTrigger asChild>
-                            <Button variant="outline" size="sm">
-                              <Trash2 className="h-4 w-4" />
+                            <Button variant="outline" size="icon" className="h-8 w-8 shrink-0 text-red-600 hover:text-red-700" title="Delete">
+                              <Trash2 className="h-3.5 w-3.5" />
                             </Button>
                           </AlertDialogTrigger>
                           <AlertDialogContent>
@@ -455,6 +445,7 @@ export default function UserManagement() {
             </Table>
           </CardContent>
         </Card>
+        </AppContainer>
       </main>
 
       {/* Update User Dialog */}

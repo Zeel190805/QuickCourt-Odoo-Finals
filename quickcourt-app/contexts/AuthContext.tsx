@@ -23,7 +23,9 @@ interface User {
 
 interface AuthContextType {
   user: User | null
-  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ ok: boolean; error?: string; otpRequired?: boolean; role?: string }>
+  loginInit: (email: string) => Promise<{ ok: boolean; method?: "password" | "otp"; error?: string }>
+  verifyOtp: (email: string, code: string) => Promise<{ ok: boolean; error?: string; role?: string }>
   signup: (userData: { name: string; email: string; password: string; role?: string }) => Promise<{ ok: boolean; error?: string; email?: string }>
   logout: () => Promise<void>
   updateUser: (userData: User) => void
@@ -66,11 +68,48 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json()
       if (response.ok) {
         setUser(data.user)
-        return { ok: true }
+        return { ok: true, role: data.user?.role }
       }
-      return { ok: false, error: data.error || "Login failed" }
+      return { ok: false, error: data.error || "Login failed", otpRequired: data.otpRequired }
     } catch {
       return { ok: false, error: "Login failed" }
+    }
+  }
+
+  const loginInit = async (email: string) => {
+    try {
+      const response = await fetch("/api/auth/login-init", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        return { ok: true, method: data.method as "password" | "otp" }
+      }
+      return { ok: false, error: data.error || "Could not start sign in" }
+    } catch {
+      return { ok: false, error: "Could not start sign in" }
+    }
+  }
+
+  const verifyOtp = async (email: string, code: string) => {
+    try {
+      const response = await fetch("/api/auth/verify-otp", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, code }),
+      })
+      const data = await response.json()
+      if (response.ok) {
+        setUser(data.user)
+        return { ok: true, role: data.user?.role }
+      }
+      return { ok: false, error: data.error || "Verification failed" }
+    } catch {
+      return { ok: false, error: "Verification failed" }
     }
   }
 
@@ -100,6 +139,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await fetch("/api/auth/logout", { method: "POST", credentials: "include" })
     } finally {
       setUser(null)
+      window.location.href = "/"
     }
   }
 
@@ -108,6 +148,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         user,
         login,
+        loginInit,
+        verifyOtp,
         signup,
         logout,
         updateUser,

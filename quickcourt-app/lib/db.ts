@@ -269,3 +269,17 @@ const AlertSchema = new Schema(
 
 export const Alert = models.Alert || model("Alert", AlertSchema)
 
+const OTPSchema = new Schema(
+  {
+    email: { type: String, required: true, lowercase: true, trim: true, index: true },
+    codeHash: { type: String, required: true },
+    expiresAt: { type: Date, required: true },
+    attempts: { type: Number, default: 0 },
+  },
+  { timestamps: true }
+)
+
+OTPSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+
+export const OTP = models.OTP || model("OTP", OTPSchema)
+

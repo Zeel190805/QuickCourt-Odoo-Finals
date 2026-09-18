@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Calendar } from "@/components/ui/calendar";
-import { localDateString } from "@/lib/dates"
+import { formatSlotRange, isValidSlotTime, localDateString, SLOT_START_HOURS } from "@/lib/dates"
 
 export default function OwnerTimeSlotsPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -122,44 +122,63 @@ export default function OwnerTimeSlotsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedVenue, selectedCourt, selectedDate]);
 
+  const slotPayload = () => ({
+    venue: selectedVenue,
+    court: selectedCourt,
+    date: localDateString(selectedDate!),
+  })
+
   const createSlot = async () => {
-    if (!selectedVenue || !selectedCourt || !selectedDate) return alert("Select venue, court and date");
-    if (!/^\d{2}:\d{2}$/.test(newTime)) return alert("Time must be HH:mm");
-    if (newPrice <= 0) return alert("Enter a valid price");
-    const date = localDateString(selectedDate);
-    const price = Number(newPrice || 0);
+    if (!selectedVenue || !selectedCourt || !selectedDate) return alert("Select venue, court and date")
+    if (!isValidSlotTime(newTime)) return alert("Use 3-hour blocks: 00:00, 03:00, 06:00 … 21:00")
+    if (newPrice <= 0) return alert("Enter a valid price")
     const res = await fetch("/api/timeslots", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ venue: selectedVenue, court: selectedCourt, date, time: newTime, price, isAvailable: true }),
-    });
+      body: JSON.stringify({ ...slotPayload(), time: newTime, price: Number(newPrice), isAvailable: true }),
+    })
     if (!res.ok) {
-      const text = await res.text();
-      try {
-        const err = JSON.parse(text);
-        alert(err.error || "Failed to create slot");
-      } catch {
-        alert("Failed to create slot");
-      }
-      return;
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || "Failed to save slot")
+      return
     }
-    setNewTime("06:00");
-    loadSlots();
-  };
+    setNewPrice(0)
+    loadSlots()
+  }
 
   const toggleAvailable = async (slot: any) => {
-    await fetch(`/api/timeslots/${slot._id}`, {
+    const res = await fetch("/api/timeslots/manage", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isAvailable: !slot.isAvailable }),
-    });
-    loadSlots();
-  };
+      body: JSON.stringify({
+        ...slotPayload(),
+        time: slot.time,
+        price: slot.price,
+        isAvailable: !slot.isAvailable,
+      }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || "Failed to update slot")
+      return
+    }
+    loadSlots()
+  }
 
   const deleteSlot = async (slot: any) => {
-    await fetch(`/api/timeslots/${slot._id}`, { method: "DELETE" });
-    loadSlots();
-  };
+    if (!confirm(`Remove override for ${formatSlotRange(slot.time)}?`)) return
+    const res = await fetch("/api/timeslots/manage", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...slotPayload(), time: slot.time }),
+    })
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}))
+      alert(err.error || "Failed to delete slot")
+      return
+    }
+    loadSlots()
+  }
 
   return (
     <div className="max-w-6xl mx-auto py-8">
@@ -219,10 +238,18 @@ export default function OwnerTimeSlotsPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex items-end gap-3">
+            <div className="flex flex-wrap items-end gap-3">
               <div>
-                <label className="text-sm font-medium">Time (HH:mm)</label>
-                <Input value={newTime} onChange={(e) => setNewTime(e.target.value)} placeholder="06:00" />
+                <label className="text-sm font-medium">Start time (3h block)</label>
+                <Select value={newTime} onValueChange={setNewTime}>
+                  <SelectTrigger className="w-[120px]"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {SLOT_START_HOURS.map((h) => {
+                      const t = `${String(h).padStart(2, "0")}:00`
+                      return <SelectItem key={t} value={t}>{formatSlotRange(t)}</SelectItem>
+                    })}
+                  </SelectContent>
+                </Select>
               </div>
               <div>
                 <label className="text-sm font-medium">Price</label>
@@ -232,15 +259,22 @@ export default function OwnerTimeSlotsPage() {
               <Button onClick={createSlot}>Add Slot</Button>
             </div>
 
-            <div className="grid md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {slots.map((s) => (
-                <div key={s._id} className={`border rounded-md p-3 ${s.isAvailable ? "" : "opacity-60"}`}>
-                  <div className="font-semibold">{s.time}</div>
-                  <div className="text-sm">₹{s.price}</div>
-                  <div className="flex gap-2 mt-2">
-                    <Button size="sm" variant="outline" onClick={() => toggleAvailable(s)}>{s.isAvailable ? "Disable" : "Enable"}</Button>
-                    <Button size="sm" variant="destructive" onClick={() => deleteSlot(s)}>Delete</Button>
-                  </div>
+                <div key={s.time} className={`border rounded-lg p-3 ${s.isAvailable ? "bg-white" : "bg-slate-50 opacity-75"}`}>
+                  <div className="font-semibold text-sm">{formatSlotRange(s.time)}</div>
+                  <div className="text-sm text-muted-foreground mt-0.5">₹{s.price} · {s.period || ""}</div>
+                  {s.isBooked && <div className="text-xs text-amber-600 mt-1">Booked</div>}
+                  {!s.isBooked && (
+                    <div className="flex gap-1.5 mt-3">
+                      <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => toggleAvailable(s)}>
+                        {s.isAvailable ? "Disable" : "Enable"}
+                      </Button>
+                      {s.hasOverride && (
+                        <Button size="sm" variant="destructive" className="h-8 text-xs px-2" onClick={() => deleteSlot(s)}>Reset</Button>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

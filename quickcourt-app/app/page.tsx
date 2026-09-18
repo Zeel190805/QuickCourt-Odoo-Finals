@@ -7,6 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { MapPin, Clock, Star, Users } from "lucide-react"
 import Link from "next/link"
+import { RouteLoader } from "@/components/route-loader"
+import { PublicLanding } from "@/components/public-landing"
+import { Logo } from "@/components/logo"
+import { AppContainer } from "@/components/app-container"
 
 interface VenueApi {
   _id: string
@@ -31,24 +35,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (authLoading) return
-    if (user) {
-      // Redirect based on user role
-      switch (user.role) {
-        case "admin":
-          router.push("/admin/dashboard")
-          break
-        case "owner":
-          router.push("/owner/dashboard")
-          break
-        default:
-          // Stay on home page for regular users
-          break
-      }
-    }
+    if (user?.role === "admin") router.replace("/admin/dashboard")
+    else if (user?.role === "owner") router.replace("/owner/dashboard")
   }, [user, router, authLoading])
 
-  // Fetch approved venues for popular venues section
   useEffect(() => {
+    if (!user || user.role === "admin" || user.role === "owner") return
     setLoading(true)
     fetch("/api/venues")
       .then((r) => (r.ok ? r.json() : Promise.reject()))
@@ -59,95 +51,23 @@ export default function HomePage() {
       })
       .catch(() => setPopularVenues([]))
       .finally(() => setLoading(false))
-  }, [])
+  }, [user])
+
+  if (authLoading || user?.role === "admin" || user?.role === "owner") {
+    return <RouteLoader label="Loading CourtX..." />
+  }
 
   if (!user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
-        {/* Header */}
-        <header className="bg-white shadow-sm">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex justify-between items-center py-6">
-              <div className="flex items-center">
-                <h1 className="text-2xl font-bold text-indigo-600">QuickCourt</h1>
-              </div>
-              <div className="flex space-x-4">
-                <Link href="/auth/login">
-                  <Button variant="outline">Login</Button>
-                </Link>
-                <Link href="/auth/signup">
-                  <Button>Sign Up</Button>
-                </Link>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* Hero Section */}
-        <section className="py-20">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-4xl font-bold text-gray-900 mb-6">Book Sports Facilities & Join Matches</h2>
-            <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-              Discover and book local sports facilities, connect with other players, and enjoy your favorite sports with
-              QuickCourt.
-            </p>
-            <div className="flex justify-center space-x-4">
-              <Link href="/auth/signup">
-                <Button size="lg" className="px-8">
-                  Get Started
-                </Button>
-              </Link>
-              <Link href="/venues">
-                <Button variant="outline" size="lg" className="px-8 bg-transparent">
-                  Browse Venues
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </section>
-
-        {/* Features */}
-        <section className="py-16 bg-white">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <h3 className="text-3xl font-bold text-center mb-12">Why Choose QuickCourt?</h3>
-            <div className="grid md:grid-cols-3 gap-8">
-              <div className="text-center">
-                <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <MapPin className="h-8 w-8 text-indigo-600" />
-                </div>
-                <h4 className="text-xl font-semibold mb-2">Find Nearby Venues</h4>
-                <p className="text-gray-600">
-                  Discover sports facilities in your area with detailed information and reviews.
-                </p>
-              </div>
-              <div className="text-center">
-                <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Clock className="h-8 w-8 text-indigo-600" />
-                </div>
-                <h4 className="text-xl font-semibold mb-2">Easy Booking</h4>
-                <p className="text-gray-600">Book courts and time slots instantly with real-time availability.</p>
-              </div>
-              <div className="text-center">
-                <div className="bg-indigo-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <Users className="h-8 w-8 text-indigo-600" />
-                </div>
-                <h4 className="text-xl font-semibold mb-2">Join Community</h4>
-                <p className="text-gray-600">Connect with other players and join matches in your area.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-      </div>
-    )
+    return <PublicLanding />
   }
 
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <AppContainer>
           <div className="flex justify-between items-center py-6">
-            <h1 className="text-2xl font-bold text-indigo-600">QuickCourt</h1>
+            <Link href="/"><Logo size="md" /></Link>
             <div className="flex items-center space-x-4">
               <span className="text-gray-700">Welcome, {user.name}!</span>
               <Link href="/profile">
@@ -155,11 +75,11 @@ export default function HomePage() {
               </Link>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-8">
+        <AppContainer>
         {/* Welcome Banner */}
         <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-lg p-8 text-white mb-8">
           <h2 className="text-3xl font-bold mb-2">Ready to Play?</h2>
@@ -276,15 +196,15 @@ export default function HomePage() {
             </div>
           )}
         </section>
+        </AppContainer>
       </main>
 
-      {/* Footer */}
       <footer className="bg-gray-900 text-white mt-16">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <AppContainer className="py-12">
           <div className="grid md:grid-cols-4 gap-8">
             {/* Company Info */}
             <div className="col-span-2">
-              <h3 className="text-2xl font-bold text-indigo-400 mb-4">QuickCourt</h3>
+              <Logo size="md" className="mb-4 [&_span:first-child]:text-indigo-300" />
               <p className="text-gray-300 mb-4 max-w-md">
                 Your premier platform for booking sports facilities and connecting with fellow sports enthusiasts. 
                 Find, book, and play at the best venues in your area.
@@ -360,7 +280,7 @@ export default function HomePage() {
           {/* Bottom Bar */}
           <div className="border-t border-gray-800 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center">
             <p className="text-gray-400 text-sm">
-              © 2024 QuickCourt. All rights reserved.
+              © 2024 CourtX. All rights reserved.
             </p>
             <div className="flex space-x-6 mt-4 md:mt-0">
               <a href="#" className="text-gray-400 hover:text-indigo-400 transition-colors text-sm">
@@ -374,7 +294,7 @@ export default function HomePage() {
               </a>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </footer>
     </div>
   )

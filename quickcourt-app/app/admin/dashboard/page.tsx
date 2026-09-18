@@ -8,22 +8,10 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Users, Building, Calendar, DollarSign, TrendingUp, UserCheck, AlertCircle } from "lucide-react"
 import Link from "next/link"
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  PieChart,
-  Pie,
-  Cell,
-  AreaChart,
-  Area,
-} from "recharts"
+import { AnimatedLineChart, AnimatedAreaChart, AnimatedBarChart, AnimatedDonut } from "@/components/dashboard-charts"
+import { Stagger, StaggerItem } from "@/components/motion"
+import { AppContainer } from "@/components/app-container"
+import { Logo } from "@/components/logo"
 
 interface AdminStats {
   totalUsers: number
@@ -145,13 +133,11 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link href="/">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
-              </Link>
+      <header className="bg-white shadow-sm border-b">
+        <AppContainer>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center gap-3">
+              <Link href="/"><Logo size="sm" /></Link>
               <Badge variant="destructive">Admin</Badge>
             </div>
             <div className="flex items-center space-x-4">
@@ -161,10 +147,11 @@ export default function AdminDashboard() {
               </Link>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-6">
+        <AppContainer>
         {/* Page Header */}
         <div className="mb-8">
           <h2 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h2>
@@ -172,7 +159,7 @@ export default function AdminDashboard() {
         </div>
 
         {/* Quick Actions */}
-        <div className="grid md:grid-cols-4 gap-4 mb-8">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <Link href="/admin/facilities">
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
               <CardContent className="p-6 text-center">
@@ -213,68 +200,80 @@ export default function AdminDashboard() {
         </div>
 
         {/* KPI Cards */}
-        <div className="grid md:grid-cols-6 gap-6 mb-8">
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-              <Users className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalUsers}</div>
-              <p className="text-xs text-muted-foreground">Registered players</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Facility Owners</CardTitle>
-              <UserCheck className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalOwners}</div>
-              <p className="text-xs text-muted-foreground">Registered owners</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
-              <Calendar className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalBookings}</div>
-              <p className="text-xs text-muted-foreground">Confirmed bookings</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Active Courts</CardTitle>
-              <Building className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.totalCourts}</div>
-              <p className="text-xs text-muted-foreground">Across all facilities</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Pending Approvals</CardTitle>
-              <AlertCircle className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{stats.pendingApprovals}</div>
-              <p className="text-xs text-muted-foreground">Facilities awaiting review</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Monthly Revenue</CardTitle>
-              <DollarSign className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-                              <div className="text-2xl font-bold">₹{stats.monthlyRevenue.toLocaleString()}</div>
-              <p className="text-xs text-muted-foreground">Confirmed this month</p>
-            </CardContent>
-          </Card>
-        </div>
+        <Stagger className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-6 gap-3 mb-6">
+          <StaggerItem>
+            <Card className="border-l-4 border-l-indigo-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Total Users</CardTitle>
+                <Users className="h-4 w-4 text-indigo-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{stats.totalUsers}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Registered players</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-emerald-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Facility Owners</CardTitle>
+                <UserCheck className="h-4 w-4 text-emerald-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{stats.totalOwners}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Registered owners</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-sky-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Total Bookings</CardTitle>
+                <Calendar className="h-4 w-4 text-sky-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{stats.totalBookings}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Confirmed bookings</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-violet-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Active Courts</CardTitle>
+                <Building className="h-4 w-4 text-violet-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{stats.totalCourts}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Across all facilities</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-amber-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Pending Approvals</CardTitle>
+                <AlertCircle className="h-4 w-4 text-amber-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">{stats.pendingApprovals}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Facilities awaiting review</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+          <StaggerItem>
+            <Card className="border-l-4 border-l-pink-500 hover:shadow-md transition-shadow">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 p-4 pb-1">
+                <CardTitle className="text-xs font-medium truncate">Monthly Revenue</CardTitle>
+                <DollarSign className="h-4 w-4 text-pink-500" />
+              </CardHeader>
+              <CardContent className="p-4 pt-0">
+                <div className="text-xl font-bold">₹{stats.monthlyRevenue.toLocaleString()}</div>
+                <p className="text-[11px] text-muted-foreground truncate">Confirmed this month</p>
+              </CardContent>
+            </Card>
+          </StaggerItem>
+        </Stagger>
 
         {/* Charts */}
         <div className="grid lg:grid-cols-2 gap-8 mb-8">
@@ -285,16 +284,14 @@ export default function AdminDashboard() {
               <CardDescription>Platform user and owner registration trends</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={stats.userGrowth}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Line type="monotone" dataKey="users" stroke="#8884d8" strokeWidth={2} />
-                  <Line type="monotone" dataKey="owners" stroke="#82ca9d" strokeWidth={2} />
-                </LineChart>
-              </ResponsiveContainer>
+              <AnimatedLineChart
+                data={stats.userGrowth}
+                xKey="month"
+                series={[
+                  { key: "users", label: "Users", color: "#6366f1" },
+                  { key: "owners", label: "Owners", color: "#22c55e" },
+                ]}
+              />
             </CardContent>
           </Card>
 
@@ -305,15 +302,11 @@ export default function AdminDashboard() {
               <CardDescription>Monthly booking volume across all facilities</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <AreaChart data={stats.bookingActivity}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip />
-                  <Area type="monotone" dataKey="bookings" stroke="#8884d8" fill="#8884d8" fillOpacity={0.6} />
-                </AreaChart>
-              </ResponsiveContainer>
+              <AnimatedAreaChart
+                data={stats.bookingActivity}
+                xKey="month"
+                series={[{ key: "bookings", label: "Bookings", color: "#6366f1" }]}
+              />
             </CardContent>
           </Card>
 
@@ -324,25 +317,7 @@ export default function AdminDashboard() {
               <CardDescription>Distribution of bookings by sport type</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={stats.sportPopularity}
-                    cx="50%"
-                    cy="50%"
-                    labelLine={false}
-                    label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
-                    outerRadius={80}
-                    fill="#8884d8"
-                    dataKey="value"
-                  >
-                    {stats.sportPopularity.map((entry: any, index: number) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip />
-                </PieChart>
-              </ResponsiveContainer>
+              <AnimatedDonut data={stats.sportPopularity} />
             </CardContent>
           </Card>
 
@@ -353,15 +328,12 @@ export default function AdminDashboard() {
               <CardDescription>Platform revenue growth over time</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={stats.revenueData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="month" />
-                  <YAxis />
-                  <Tooltip formatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]} />
-                  <Bar dataKey="revenue" fill="#82ca9d" />
-                </BarChart>
-              </ResponsiveContainer>
+              <AnimatedBarChart
+                data={stats.revenueData}
+                xKey="month"
+                bars={[{ key: "revenue", label: "Revenue", color: "#22c55e" }]}
+                tooltipFormatter={(value) => [`₹${Number(value ?? 0).toLocaleString()}`, "Revenue"]}
+              />
             </CardContent>
           </Card>
         </div>
@@ -471,6 +443,7 @@ export default function AdminDashboard() {
             </CardContent>
           </Card>
         </div>
+        </AppContainer>
       </main>
     </div>
   )

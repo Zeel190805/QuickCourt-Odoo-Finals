@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useMemo } from "react"
 import { useParams, useRouter, useSearchParams } from "next/navigation"
 import { useAuth } from "@/contexts/AuthContext"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,10 @@ import { Calendar } from "@/components/ui/calendar"
 import { useToast } from "@/hooks/use-toast"
 import { ArrowLeft, MapPin, CreditCard } from "lucide-react"
 import Link from "next/link"
-import { localDateString, startOfToday } from "@/lib/dates"
+import { localDateString, startOfToday, formatSlotRange, SLOT_DURATION_HOURS } from "@/lib/dates"
+import { resolveCourtRates } from "@/lib/pricing"
+import { Logo } from "@/components/logo"
+import { AppContainer } from "@/components/app-container"
 
 interface TimeSlot {
   _id?: string
@@ -26,6 +29,7 @@ interface Venue {
   name: string
   location: string
   description?: string
+  priceRange?: { min: number; max: number }
 }
 
 interface Court {
@@ -33,6 +37,8 @@ interface Court {
   name: string
   sport: string
   basePricePerHour: number
+  dayPrice?: number
+  nightPrice?: number
 }
 
 interface BookingData {
@@ -40,8 +46,7 @@ interface BookingData {
   court: Court | null
   selectedDate: Date | null
   selectedTimeSlot: TimeSlot | null
-  duration: number
-  totalPrice: number
+  slotCount: number
 }
 
 export default function BookingPage() {
@@ -56,8 +61,7 @@ export default function BookingPage() {
     court: null,
     selectedDate: null,
     selectedTimeSlot: null,
-    duration: 1,
-    totalPrice: 0,
+    slotCount: 1,
   })
 
   const [availableSlots, setAvailableSlots] = useState<TimeSlot[]>([])
@@ -67,23 +71,36 @@ export default function BookingPage() {
 
   const visibleSlots = availableSlots.filter((s) => (periodFilter === "all" ? true : s.period === periodFilter))
 
-  const nextHour = (time: string) => `${String(Number(time.split(":")[0]) + 1).padStart(2, "0")}:00`
+  const nextSlot = (time: string) =>
+    `${String(Number(time.split(":")[0]) + SLOT_DURATION_HOURS).padStart(2, "0")}:00`
 
-  const coveredSlots = (() => {
-    if (!bookingData.selectedTimeSlot) return [] as TimeSlot[]
-    const out: TimeSlot[] = []
-    let t = bookingData.selectedTimeSlot.time
-    for (let i = 0; i < bookingData.duration; i++) {
-      const slot = availableSlots.find((s) => s.time === t)
-      if (!slot) break
-      out.push(slot)
-      t = nextHour(t)
+  const courtRates = useMemo(
+    () => resolveCourtRates(bookingData.court, bookingData.venue),
+    [bookingData.court, bookingData.venue]
+  )
+
+  const billing = useMemo(() => {
+    if (!bookingData.selectedTimeSlot) {
+      return { slots: [] as TimeSlot[], total: 0, hours: 0, endTime: "", valid: false }
     }
-    return out
-  })()
-
-  const coverageValid =
-    coveredSlots.length === bookingData.duration && coveredSlots.every((s) => s.isAvailable)
+    const slots: TimeSlot[] = []
+    let t = bookingData.selectedTimeSlot.time
+    for (let i = 0; i < bookingData.slotCount; i++) {
+      const slot = availableSlots.find((s) => s.time === t)
+      if (!slot || !slot.isAvailable) break
+      slots.push(slot)
+      t = nextSlot(t)
+    }
+    const total = slots.reduce((sum, s) => sum + Number(s.price || 0), 0)
+    const hours = slots.length * SLOT_DURATION_HOURS
+    const endTime =
+      slots.length === 0
+        ? ""
+        : slots.length === 1
+          ? formatSlotRange(slots[0].time)
+          : `${formatSlotRange(slots[0].time).split(" – ")[0]} – ${formatSlotRange(slots[slots.length - 1].time).split(" – ")[1]}`
+    return { slots, total, hours, endTime, valid: slots.length === bookingData.slotCount }
+  }, [bookingData.selectedTimeSlot, bookingData.slotCount, availableSlots])
 
   useEffect(() => {
     if (authLoading) return
@@ -196,19 +213,13 @@ export default function BookingPage() {
     loadSlots()
   }, [bookingData.selectedDate, bookingData.venue, bookingData.court, search, toast])
 
-  useEffect(() => {
-    const total = coveredSlots.reduce((sum, s) => sum + Number(s.price || 0), 0)
-    setBookingData((prev) => (prev.totalPrice === total ? prev : { ...prev, totalPrice: total }))
-    // coveredSlots is derived from selectedTimeSlot, duration and availableSlots
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [bookingData.selectedTimeSlot, bookingData.duration, availableSlots])
-
   const handleDateSelect = (date: Date | undefined) => {
     if (date) {
       setBookingData((prev) => ({
         ...prev,
         selectedDate: date,
         selectedTimeSlot: null,
+        slotCount: 1,
       }))
     }
   }
@@ -218,12 +229,13 @@ export default function BookingPage() {
       setBookingData((prev) => ({
         ...prev,
         selectedTimeSlot: slot,
+        slotCount: 1,
       }))
     }
   }
 
-  const handleDurationChange = (duration: number) => {
-    setBookingData((prev) => ({ ...prev, duration }))
+  const handleSlotCountChange = (count: number) => {
+    setBookingData((prev) => ({ ...prev, slotCount: count }))
   }
 
   const handleBooking = async () => {
@@ -261,8 +273,9 @@ export default function BookingPage() {
         sport: bookingData.court.sport,
         date: localDateString(bookingData.selectedDate),
         time: bookingData.selectedTimeSlot.time,
-        duration: bookingData.duration,
-        totalAmount: bookingData.totalPrice,
+        duration: billing.hours,
+        slotCount: bookingData.slotCount,
+        totalAmount: billing.total,
       }
 
       console.log("📦 Sending booking payload:", JSON.stringify(bookingPayload, null, 2))
@@ -365,22 +378,21 @@ export default function BookingPage() {
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
       <header className="bg-white shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Button variant="ghost" onClick={() => router.back()}>
-                <ArrowLeft className="h-4 w-4 mr-2" />
+        <AppContainer>
+          <div className="flex justify-between items-center py-4">
+            <div className="flex items-center gap-3">
+              <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                <ArrowLeft className="h-4 w-4 mr-1" />
                 Back
               </Button>
-              <Link href="/">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
-              </Link>
+              <Link href="/"><Logo size="sm" /></Link>
             </div>
           </div>
-        </div>
+        </AppContainer>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-6">
+        <AppContainer>
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Book Your Court</h1>
           <p className="text-gray-600">Select your preferred date and time</p>
@@ -412,7 +424,11 @@ export default function BookingPage() {
                       <Badge variant="secondary">{bookingData.court.sport}</Badge>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-bold text-indigo-600">₹{bookingData.selectedTimeSlot?.price || bookingData.court.basePricePerHour}/hour</div>
+                      <div className="text-right text-sm">
+                        <div className="font-semibold text-indigo-600">Day ₹{courtRates.dayPrice}/hr</div>
+                        <div className="text-muted-foreground">Night ₹{courtRates.nightPrice}/hr</div>
+                        <div className="text-xs text-muted-foreground mt-1">3-hour blocks billed hourly</div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -442,7 +458,7 @@ export default function BookingPage() {
                 <CardHeader>
                   <CardTitle>Select Time Slot</CardTitle>
                   <CardDescription>
-                    Pick any open hour for {bookingData.selectedDate.toDateString()}. Booked hours are shown greyed out.
+                    3-hour blocks for {bookingData.selectedDate.toDateString()}. Prices = hourly rate × 3 per block.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -461,7 +477,7 @@ export default function BookingPage() {
                   {visibleSlots.length === 0 ? (
                     <p className="text-sm text-muted-foreground">No slots available for this selection.</p>
                   ) : (
-                    <div className="grid grid-cols-4 gap-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                       {visibleSlots.map((slot) => (
                         <Button
                           key={slot._id || slot.time}
@@ -474,17 +490,17 @@ export default function BookingPage() {
                           }
                           disabled={!slot.isAvailable}
                           onClick={() => handleTimeSlotSelect(slot)}
-                          className="h-14 flex-col"
+                          className="h-16 flex-col py-2"
                         >
-                          <div className="text-center">
-                            <div className="font-semibold">{slot.time}</div>
+                          <div className="text-center leading-tight">
+                            <div className="font-semibold text-xs">{formatSlotRange(slot.time)}</div>
                             {slot.isAvailable ? (
                               <>
-                                <div className="text-xs">₹{slot.price}</div>
-                                <div className="text-[10px] uppercase opacity-70">{slot.period}</div>
+                                <div className="text-xs mt-0.5">₹{slot.price}</div>
+                                <div className="text-[10px] uppercase opacity-70">{slot.period} · 3h</div>
                               </>
                             ) : (
-                              <div className="text-xs">Booked</div>
+                              <div className="text-xs mt-1">Booked</div>
                             )}
                           </div>
                         </Button>
@@ -495,41 +511,38 @@ export default function BookingPage() {
               </Card>
             )}
 
-            {/* Duration Selection */}
             {bookingData.selectedTimeSlot && (
               <Card>
                 <CardHeader>
-                  <CardTitle>Select Duration</CardTitle>
+                  <CardTitle>How many 3-hour slots?</CardTitle>
                   <CardDescription>
-                    Book a custom length starting {bookingData.selectedTimeSlot.time}. Options that overlap a booked hour are disabled.
+                    Starting {formatSlotRange(bookingData.selectedTimeSlot.time)}. Each block is exactly 3 hours.
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-4 gap-3">
-                    {[1, 2, 3, 4, 5, 6, 7, 8].map((hours) => {
+                  <div className="grid grid-cols-3 gap-3">
+                    {[1, 2, 3].map((count) => {
                       const start = bookingData.selectedTimeSlot!.time
                       let ok = true
                       let sum = 0
                       let t = start
-                      for (let i = 0; i < hours; i++) {
+                      for (let i = 0; i < count; i++) {
                         const s = availableSlots.find((x) => x.time === t)
                         if (!s || !s.isAvailable) { ok = false; break }
                         sum += Number(s.price || 0)
-                        t = nextHour(t)
+                        t = nextSlot(t)
                       }
                       return (
                         <Button
-                          key={hours}
-                          variant={bookingData.duration === hours ? "default" : "outline"}
+                          key={count}
+                          variant={bookingData.slotCount === count ? "default" : "outline"}
                           disabled={!ok}
-                          onClick={() => handleDurationChange(hours)}
-                          className="h-12"
+                          onClick={() => handleSlotCountChange(count)}
+                          className="h-14"
                         >
                           <div className="text-center">
-                            <div className="font-semibold">
-                              {hours} hour{hours > 1 ? "s" : ""}
-                            </div>
-                            <div className="text-xs">{ok ? `₹${sum}` : "N/A"}</div>
+                            <div className="font-semibold">{count * SLOT_DURATION_HOURS}h</div>
+                            <div className="text-xs">{ok ? `₹${sum}` : "Unavailable"}</div>
                           </div>
                         </Button>
                       )
@@ -566,28 +579,36 @@ export default function BookingPage() {
                       <span className="font-semibold">{bookingData.selectedDate.toDateString()}</span>
                     </div>
                   )}
-                  {bookingData.selectedTimeSlot && (
+                  {billing.endTime && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Time:</span>
-                      <span className="font-semibold">{bookingData.selectedTimeSlot.time}</span>
+                      <span className="font-semibold">{billing.endTime}</span>
                     </div>
                   )}
-                  {bookingData.duration > 0 && (
+                  {billing.hours > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Duration:</span>
-                      <span className="font-semibold">
-                        {bookingData.duration} hour{bookingData.duration > 1 ? "s" : ""}
-                      </span>
+                      <span className="font-semibold">{billing.hours} hours ({bookingData.slotCount} slot{bookingData.slotCount > 1 ? "s" : ""})</span>
+                    </div>
+                  )}
+                  {billing.slots.length > 0 && (
+                    <div className="text-xs text-muted-foreground border-t pt-2 space-y-1">
+                      {billing.slots.map((s) => (
+                        <div key={s.time} className="flex justify-between">
+                          <span>{formatSlotRange(s.time)}</span>
+                          <span>₹{s.price}</span>
+                        </div>
+                      ))}
                     </div>
                   )}
                 </div>
 
-                {bookingData.totalPrice > 0 && (
+                {billing.total > 0 && (
                   <>
                     <div className="border-t pt-4">
                       <div className="flex justify-between items-center">
                         <span className="text-lg font-semibold">Total:</span>
-                        <span className="text-2xl font-bold text-indigo-600">₹{bookingData.totalPrice}</span>
+                        <span className="text-2xl font-bold text-indigo-600">₹{billing.total}</span>
                       </div>
                     </div>
 
@@ -595,7 +616,7 @@ export default function BookingPage() {
                       className="w-full"
                       size="lg"
                       onClick={handleBooking}
-                      disabled={isBooking || !bookingData.selectedDate || !bookingData.selectedTimeSlot || !coverageValid}
+                      disabled={isBooking || !bookingData.selectedDate || !bookingData.selectedTimeSlot || !billing.valid}
                     >
                       {isBooking ? (
                         <>
@@ -605,7 +626,7 @@ export default function BookingPage() {
                       ) : (
                         <>
                           <CreditCard className="h-4 w-4 mr-2" />
-                          Book & Pay ₹{bookingData.totalPrice}
+                          Book & Pay ₹{billing.total}
                         </>
                       )}
                     </Button>
@@ -620,6 +641,7 @@ export default function BookingPage() {
             </Card>
           </div>
         </div>
+        </AppContainer>
       </main>
     </div>
   )

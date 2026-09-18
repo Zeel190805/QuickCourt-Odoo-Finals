@@ -53,6 +53,9 @@ export function lastNMonths(n: number): Array<{ year: number; month: number; lab
 
 export type SlotPeriod = "day" | "night"
 
+export const SLOT_DURATION_HOURS = 3
+export const SLOT_START_HOURS = [0, 3, 6, 9, 12, 15, 18, 21] as const
+
 export const DAY_START_HOUR = 6
 export const DAY_END_HOUR = 18
 
@@ -73,32 +76,58 @@ export function periodLabel(period: SlotPeriod): string {
   return period === "day" ? "Day (6 AM – 6 PM)" : "Night (6 PM – 6 AM)"
 }
 
+export function isValidSlotTime(time: string): boolean {
+  if (!isValidTime(time)) return false
+  const [h, m] = time.split(":").map(Number)
+  return m === 0 && (SLOT_START_HOURS as readonly number[]).includes(h)
+}
+
+export function slotBlockPrice(startHour: number, dayPrice: number, nightPrice: number): number {
+  let total = 0
+  for (let i = 0; i < SLOT_DURATION_HOURS; i++) {
+    const period = periodForHour((startHour + i) % 24)
+    total += period === "day" ? dayPrice : nightPrice
+  }
+  return total
+}
+
+export function formatSlotRange(startTime: string): string {
+  const startHour = Number(startTime.split(":")[0])
+  const endHour = (startHour + SLOT_DURATION_HOURS) % 24
+  return `${hourToTime(startHour)} – ${hourToTime(endHour)}`
+}
+
 export function generateDaySlots(
   dayPrice: number,
   nightPrice: number
-): Array<{ time: string; hour: number; period: SlotPeriod; price: number }> {
-  const out: Array<{ time: string; hour: number; period: SlotPeriod; price: number }> = []
-  for (let hour = 0; hour < 24; hour++) {
+): Array<{ time: string; hour: number; period: SlotPeriod; price: number; durationHours: number }> {
+  return SLOT_START_HOURS.map((hour) => {
     const period = periodForHour(hour)
-    out.push({
+    return {
       time: hourToTime(hour),
       hour,
       period,
-      price: period === "day" ? dayPrice : nightPrice,
-    })
-  }
-  return out
+      price: slotBlockPrice(hour, dayPrice, nightPrice),
+      durationHours: SLOT_DURATION_HOURS,
+    }
+  })
 }
 
-export function consecutiveHourTimes(startTime: string, durationHours: number): string[] {
-  const [h, m] = startTime.split(":").map(Number)
+export function consecutiveSlotTimes(startTime: string, slotCount: number): string[] {
+  const startHour = Number(startTime.split(":")[0])
   const times: string[] = []
-  for (let i = 0; i < durationHours; i++) {
-    const hour = h + i
-    if (hour > 23) break
-    times.push(`${String(hour).padStart(2, "0")}:${String(m).padStart(2, "0")}`)
+  for (let i = 0; i < slotCount; i++) {
+    const hour = startHour + i * SLOT_DURATION_HOURS
+    if (hour > 21) break
+    times.push(hourToTime(hour))
   }
   return times
+}
+
+/** @deprecated use consecutiveSlotTimes for 3-hour blocks */
+export function consecutiveHourTimes(startTime: string, durationHours: number): string[] {
+  const slotCount = Math.ceil(durationHours / SLOT_DURATION_HOURS)
+  return consecutiveSlotTimes(startTime, slotCount)
 }
 
 export function bookingDateTime(dateStr: string, timeStr: string): Date | null {
