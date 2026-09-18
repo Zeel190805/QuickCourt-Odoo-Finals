@@ -161,7 +161,6 @@ export default function ProfilePage() {
 
   const handleLogout = async () => {
     await logout()
-    router.push("/")
   }
 
   if (authLoading || !user) {
@@ -180,7 +179,7 @@ export default function ProfilePage() {
                 Back
               </Button>
               <Link href="/">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
+                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">CourtX</h1>
               </Link>
             </div>
             <div className="flex items-center space-x-4">

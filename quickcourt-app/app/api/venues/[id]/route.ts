@@ -1,4 +1,4 @@
-import { dbConnect, Booking, Venue } from "@/lib/db"
+import { dbConnect, Booking, Court, Venue } from "@/lib/db"
 import { NextRequest, NextResponse } from "next/server"
 import { deleteVenueCascade, isValidObjectId, jsonError, requireAuth, requireVenueAccess } from "@/lib/api"
 import { getSessionFromRequest } from "@/lib/auth"
@@ -54,6 +54,16 @@ async function updateVenue(request: NextRequest, id: string) {
   }
   const venue = await Venue.findByIdAndUpdate(id, { $set: updates }, { new: true, runValidators: true })
   if (!venue) return jsonError("Venue not found", 404)
+
+  const day = Number(data.dayPrice ?? data.priceRange?.min ?? venue.priceRange?.min)
+  const night = Number(data.nightPrice ?? data.priceRange?.max ?? venue.priceRange?.max)
+  if (day > 0 && night > 0) {
+    await Court.updateMany(
+      { venue: id },
+      { $set: { dayPrice: day, nightPrice: night, basePricePerHour: Math.min(day, night) } }
+    )
+  }
+
   return NextResponse.json(venue)
 }
 

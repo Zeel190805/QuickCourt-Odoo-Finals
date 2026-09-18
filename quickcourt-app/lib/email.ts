@@ -73,7 +73,7 @@ async function sendMail(to: string, subject: string, html: string): Promise<bool
   try {
     const transporter = getTransporter()
     await transporter.sendMail({
-      from: `"QuickCourt" <${process.env.GMAIL_USER}>`,
+      from: `"CourtX" <${process.env.GMAIL_USER}>`,
       to,
       subject,
       html,
@@ -92,7 +92,7 @@ export async function sendWelcomeEmail(email: string, name: string): Promise<boo
       <html>
       <head>
           <meta charset="utf-8">
-          <title>Welcome to QuickCourt</title>
+          <title>Welcome to CourtX</title>
           <style>
               body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
               .container { max-width: 600px; margin: 0 auto; padding: 20px; }
@@ -103,20 +103,54 @@ export async function sendWelcomeEmail(email: string, name: string): Promise<boo
       <body>
           <div class="container">
               <div class="header">
-                  <h1>Welcome to QuickCourt!</h1>
+                  <h1>Welcome to CourtX!</h1>
               </div>
               <div class="content">
                   <h2>Hello ${safeName}!</h2>
-                  <p>Your email has been successfully verified. Welcome to QuickCourt.</p>
+                  <p>Your account is ready. Welcome to CourtX.</p>
                   <p>You can now browse venues, book courts, and manage your reservations.</p>
-                  <p><a href="${appUrl()}">Open QuickCourt</a></p>
-                  <p>Best regards,<br>The QuickCourt Team</p>
+                  <p><a href="${appUrl()}">Open CourtX</a></p>
+                  <p>Best regards,<br>The CourtX Team</p>
               </div>
           </div>
       </body>
       </html>
     `
-  return sendMail(email, "Welcome to QuickCourt - Email Verified!", html)
+  return sendMail(email, "Welcome to CourtX", html)
+}
+
+export async function sendOtpEmail(email: string, code: string, name?: string): Promise<boolean> {
+  const safeName = escapeHtml(name || "there")
+  const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+          <meta charset="utf-8">
+          <title>Your CourtX login code</title>
+          <style>
+              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+              .container { max-width: 600px; margin: 0 auto; padding: 20px; }
+              .header { background: #4f46e5; color: white; padding: 24px; text-align: center; border-radius: 10px; }
+              .content { background: #f9f9f9; padding: 30px; border-radius: 10px; margin-top: 20px; text-align: center; }
+              .code { font-size: 34px; letter-spacing: 8px; font-weight: bold; color: #4f46e5; margin: 16px 0; }
+          </style>
+      </head>
+      <body>
+          <div class="container">
+              <div class="header">
+                  <h1>CourtX Verification</h1>
+              </div>
+              <div class="content">
+                  <p>Hi ${safeName},</p>
+                  <p>Use the code below to sign in to your admin/owner account.</p>
+                  <div class="code">${escapeHtml(code)}</div>
+                  <p>This code expires in 5 minutes. If you didn't request it, you can ignore this email.</p>
+              </div>
+          </div>
+      </body>
+      </html>
+    `
+  return sendMail(email, "Your CourtX login code", html)
 }
 
 async function sendBookingConfirmation(data: BookingEmailData): Promise<boolean> {
@@ -135,7 +169,7 @@ async function sendBookingConfirmation(data: BookingEmailData): Promise<boolean>
       <p><a href="${data.bookingUrl}">View your bookings</a></p>
     </div>
   `
-  return sendMail(data.customerEmail, "QuickCourt booking confirmed", html)
+  return sendMail(data.customerEmail, "CourtX booking confirmed", html)
 }
 
 async function sendBookingCancellation(data: CancellationEmailData): Promise<boolean> {
@@ -153,7 +187,7 @@ async function sendBookingCancellation(data: CancellationEmailData): Promise<boo
       <p><a href="${data.bookingsUrl}">View bookings</a></p>
     </div>
   `
-  return sendMail(data.customerEmail, "QuickCourt booking cancelled", html)
+  return sendMail(data.customerEmail, "CourtX booking cancelled", html)
 }
 
 async function sendBookingReminder(data: ReminderEmailData): Promise<boolean> {
@@ -170,7 +204,7 @@ async function sendBookingReminder(data: ReminderEmailData): Promise<boolean> {
       <p><a href="${data.bookingUrl}">View booking</a></p>
     </div>
   `
-  return sendMail(data.customerEmail, "QuickCourt booking reminder", html)
+  return sendMail(data.customerEmail, "CourtX booking reminder", html)
 }
 
 export const emailService = {

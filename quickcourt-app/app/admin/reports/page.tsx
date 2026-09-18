@@ -196,7 +196,7 @@ export default function Reports() {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
               <Link href="/admin/dashboard">
-                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">QuickCourt</h1>
+                <h1 className="text-2xl font-bold text-indigo-600 cursor-pointer">CourtX</h1>
               </Link>
               <Badge variant="destructive">Admin</Badge>
             </div>

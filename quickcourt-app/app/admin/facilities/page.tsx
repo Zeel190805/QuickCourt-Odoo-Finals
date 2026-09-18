@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table";
+import { AppContainer } from "@/components/app-container";
 
 export default function AdminFacilitiesPage() {
   const { user, isLoading: authLoading } = useAuth();
@@ -49,7 +50,7 @@ export default function AdminFacilitiesPage() {
   };
 
   return (
-    <div className="max-w-6xl mx-auto py-8">
+    <AppContainer className="py-8">
       <div className="flex items-center justify-between mb-6">
         <h1 className="text-2xl font-bold">Facility Approvals</h1>
         <Badge variant="outline">Admin</Badge>
@@ -82,20 +83,22 @@ export default function AdminFacilitiesPage() {
               </TableCell>
               <TableCell>{v?.priceRange?.min}</TableCell>
               <TableCell>{v?.priceRange?.max}</TableCell>
-              <TableCell>
-                {v.status !== "approved" && (
-                  <Button size="sm" className="mr-2" onClick={() => approveVenue(v._id)} disabled={loading}>
-                    Approve
+              <TableCell className="whitespace-nowrap">
+                <div className="inline-flex items-center gap-2">
+                  {v.status !== "approved" && (
+                    <Button size="sm" onClick={() => approveVenue(v._id)} disabled={loading}>
+                      Approve
+                    </Button>
+                  )}
+                  <Button size="sm" variant="destructive" onClick={() => deleteVenue(v._id)} disabled={loading}>
+                    Delete
                   </Button>
-                )}
-                <Button size="sm" variant="destructive" onClick={() => deleteVenue(v._id)} disabled={loading}>
-                  Delete
-                </Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}
         </TableBody>
       </Table>
-    </div>
+    </AppContainer>
   );
 }
